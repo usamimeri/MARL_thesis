@@ -1,0 +1,57 @@
+from typing import List
+import yaml
+import numpy as np
+from scipy.stats import norm
+import torch
+
+
+def load_config(config_path='config.yaml') -> dict:
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def generate_levels(num_worker_agents) -> list:
+    """利用标准正态分布初始化技能禀赋"""
+    min_value = 0.5           # 技能禀赋最小值
+    num_worker_agents           # 采样点数量
+    min_percentile = norm.cdf(min_value)
+    # 构造均匀的分位点
+    percentiles = np.linspace(min_percentile, 0.9999, num_worker_agents)
+    levels = norm.ppf(percentiles)
+    # 随机打乱
+    np.random.shuffle(levels)
+    return levels
+
+
+def distribute_evenly(total: int, max_label: int) -> List[int]:
+    """
+    将 total 个元素均匀分配到标签 0,1,...,max_label-1 共 max_label 个桶中。
+    每个标签至少出现一次，且各标签出现次数尽可能均匀。
+    用于初始化每个工人的企业，输出为企业对应的索引
+    """
+    # 标签总数
+    num_buckets = max_label
+
+    # 基础分配：每个桶至少 base_cnt 个
+    base_cnt, remainder = divmod(total, num_buckets)
+    # remainder 个桶多取 1 个，保证总和为 total
+    counts = [base_cnt + (1 if i < remainder else 0) for i in range(num_buckets)]
+
+    result = []
+    for label, cnt in enumerate(counts):
+        result.extend([label] * cnt)
+
+    np.random.shuffle(result)
+
+    return result
+
+
+def worker_one_hot(num_worker_agents):
+    """生成一个单位矩阵，相当于劳动者身份独热编码
+    这里假定了计算的时候劳动者是按顺序的，且后续打乱只能在batch层面。
+    一般rollout时维度是(seq_len,num_worker_agents,state_dim)
+    这里生成的是(num_worker_agents,num_worker_agents)的矩阵，才可以在最后一个
+    维度上拼接
+    """
+    return torch.eye(num_worker_agents)

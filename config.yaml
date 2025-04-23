@@ -1,0 +1,33 @@
+constants:
+  quote: [2,4,6,8,10,12,14,16,18,20]
+  switch_job_penalty: 2.0
+  labor_aversion: [0.2,0.45,0.7] # 劳动厌恶系数
+  risk_aversion: 0.33 # 相对风险厌恶
+  interest_rate: 0.1 # 银行利率
+  tax_rate: [0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5] #政府税率
+  equality_param: 0.5 # 公平效率系数
+  labor_range: [5,10,15,20,25,30,35,40,45,50] # 劳动者劳动量
+  consumption_range: [10,20,30,40,50,60,70,80,90,100] # 劳动者消费量
+  wage_range: [2,4,6,8,10,12,14,16,18,20] # 劳动者工资
+
+  depreciation_rate: 0.025 # 折旧率
+  investment_rate: 0.1 # 资产用于投资的比率
+
+  # 一些训练相关的参数
+  gamma: 0.99 # 折扣因子
+  lambda: 0.98 # GAE参数
+  
+
+initialize:
+  quote: 10.0
+  worker_asset: 500.0
+  firm_asset: 2000.0
+  firm_capital: 500
+  tax_rate: 0.15
+  marginal_price: 10.0
+  wage: 10.0
+
+device: cuda
+num_worker_agents: 10
+num_firm_agents: 4
+
