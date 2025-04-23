@@ -67,3 +67,9 @@ class EconomicEnv:
         [200,500,400]
         """
         return torch.bincount(self.worker_in_firm, weights=self.worker_labor, minlength=self.num_firm_agents)
+
+    def judge_switch_firm(self, next_worker_in_firm):
+        """判断劳动者是否跳槽，若跳槽则对应向量位置为1"""
+        return torch.where(self.worker_in_firm != next_worker_in_firm,
+                           torch.ones(self.num_worker_agents, dtype=torch.long),
+                           torch.zeros(self.num_worker_agents, dtype=torch.long)).to(self.device)

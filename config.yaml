@@ -17,6 +17,15 @@ constants:
   gamma: 0.99 # 折扣因子
   lambda: 0.98 # GAE参数
   
+size:
+  action:
+    worker: [10,10,10,4] # MultiDiscrete，消费量、报价、劳动量、工作企业(这里假定是4家，因为yaml不能引用变量)
+    firm: [10,10] # 单位劳动工资、报价
+    government: 10 # 税率
+  observation:
+    worker: 16 # 1+1+1+1+4+10
+    firm: 12 # 1+1+1+1+4+4
+    government: 20 # 10+4+4+1+1
 
 initialize:
   quote: 10.0
