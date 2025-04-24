@@ -1,7 +1,9 @@
 from utils import (load_config,
                    generate_levels,
                    distribute_evenly,
-                   distribute_elements)
+                   distribute_elements,
+                   inverse_weight_normalized,
+                   gini)
 import torch
 
 
@@ -12,6 +14,10 @@ class EconomicEnv:
         self.num_firm_agents = self.config['num_firm_agents']
         self.interest_rate = self.config['constants']['interest_rate']
         self.device = self.config['device']
+        self.investment_rate = self.config['constants']['investment_rate']
+        self.depreciation_rate = self.config['constants']['depreciation_rate']
+        self.switch_job_penalty = self.config['constants']['switch_job_penalty']
+        self.swf_eq_param = self.config['constants']['swf_eq_param']
         # 所有可能的报价
         self.quote_range = torch.tensor(self.config['constants']['quote_range'], device=self.device)
         self.labor_range = torch.tensor(self.config['constants']['labor_range'], device=self.device)
@@ -41,6 +47,9 @@ class EconomicEnv:
         self.worker_labor = torch.zeros((self.num_worker_agents,), device=self.device)
         # 劳动者消费量
         self.worker_consumption = torch.zeros((self.num_worker_agents,), device=self.device)
+        # 劳动者在上家企业累计工作时长
+        # 如果跳槽则清空，若不跳槽继续累计
+        self.worker_firm_len = torch.zeros((self.num_worker_agents,), device=self.device)
         # ========================== 企业相关 ==========================
         # 企业资产
         self.firm_asset = torch.full((self.num_firm_agents,),
@@ -181,8 +190,8 @@ class EconomicEnv:
         self.firm_quote = self.quote_range[firm_action[:, 0]]
         self.firm_wage = self.wage_range[firm_action[:, 1]]
         # 计算企业生产量，根据生产函数
-        self.firm_production = ((self.firm_capital**self.firm_capital_elasticity) * \
-            (self.firm_labor**(1-self.firm_capital_elasticity))).floor()
+        self.firm_production = ((self.firm_capital**self.firm_capital_elasticity) *
+                                (self.firm_labor**(1-self.firm_capital_elasticity))).floor()
         # 市场清算
         self.market_clearing()
         # 工资结算，对应每个劳动者获得的工资
@@ -193,9 +202,47 @@ class EconomicEnv:
 
     def government_settlement(self, government_action: torch.Tensor):
         """政府执行动作后结算
-
+        - 计算企业效用，即奖励（就是税前利润）
+        - 更新企业资产（计算税前利润）
+        - 企业资本投入和折旧
+        - 企业和劳动者征税
+        - 计算转移支付（与资产成反比）
+        - 更新劳动者资产（上一期资产+转移支付+税前工资-税收-消费额）*（1+利率）
+        - 计算劳动者效用，即奖励（根据消费、劳动、跳槽，资产变化）
+        - 计算社会效率
+        - 计算社会公平性（根据基尼系数）
+        - 计算政府奖励
         """
-        pass
+        self.tax_rate = self.tax_rate_range[government_action[:, 0]]
+        # 企业税前利润，也是效用和奖励
+        self.firm_pre_tax_profit = self.firm_sales-self.firm_wage_cost
+        capital_investment = self.firm_capital*(1-self.investment_rate)
+        self.firm_asset = self.firm_asset-capital_investment+(1-self.tax_rate)*self.firm_pre_tax_profit
+        self.firm_capital = self.firm_capital*(1-self.depreciation_rate)+capital_investment
+        # 征税
+        worker_tax = self.pre_tax_wages*self.tax_rate
+        firm_tax = self.firm_pre_tax_profit*self.tax_rate
+        self.total_transfer = worker_tax.sum()+firm_tax.sum()
+        # 转移支付
+        weights = inverse_weight_normalized(self.worker_asset)
+        transfer_to_worker = self.total_transfer*weights
+        # 更新劳动者资产
+        previous_worker_asset = self.worker_asset.clone()
+        self.worker_asset = (1+self.interest_rate)*(self.worker_asset+self.pre_tax_wages +
+                                                    transfer_to_worker-worker_tax-self.worker_cost)
+
+        # 资产变动额
+        self.asset_change = self.worker_asset-previous_worker_asset
+
+        # 计算劳动者效用（相对风险厌恶为0.33固定，1-0.33=0.67），也是奖励
+        self.worker_utility = (self.worker_consumption**0.67)/0.67-self.worker_labor_aversion * \
+            self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len
+
+        # 更新劳动者在企业累计工作时长
+        self.worker_firm_len = (self.worker_firm_len+self.worker_labor)*(1-self.worker_switch_firm)
+        self.social_efficiency = torch.sigmoid(self.worker_utility.sum()+self.firm_pre_tax_profit.sum())
+        self.equality = 1-(self.num_worker_agents)/(self.num_worker_agents-1)*gini(self.pre_tax_wages)
+        self.government_reward = ((self.equality)**self.swf_eq_param)*(self.social_efficiency**(1-self.swf_eq_param))
 
     def scalar_repeat(self, scalar, n: int):
         "将标量扩展为形状为 (n, ) 的张量。"

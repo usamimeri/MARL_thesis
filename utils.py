@@ -47,6 +47,27 @@ def distribute_evenly(total: int, max_label: int) -> List[int]:
     return result
 
 
+def inverse_weight_normalized(input_tensor: torch.Tensor) -> torch.Tensor:
+    """
+    根据输入的一维张量，计算与其值大小成反比的权重，并进行归一化处理。
+
+    参数:
+    - input_tensor (torch.Tensor): 输入的一维张量
+
+    返回:
+    - torch.Tensor: 归一化后的权重向量
+    """
+    # 防止除以零，给定一个非常小的值
+    epsilon = 1e-6
+    # 计算反比权重
+    weights = 1.0 / (input_tensor + epsilon)
+
+    # 对权重进行归一化，使得权重的和为1
+    normalized_weights = weights / weights.sum()
+
+    return normalized_weights
+
+
 def distribute_elements(lst, n):
     """
     将输入列表的元素尽可能均匀地分配到一个长度为 n 的列表中。
@@ -91,4 +112,9 @@ def distribute_elements(lst, n):
     return result
 
 
-
+def gini(x: torch.Tensor) -> float:
+    x_sorted, _ = torch.sort(x)
+    n = len(x)
+    index = torch.arange(1, n + 1, dtype=torch.float32, device=x.device)
+    gini = (torch.sum((2 * index - n - 1) * x_sorted)) / (n * torch.sum(x_sorted))
+    return gini
