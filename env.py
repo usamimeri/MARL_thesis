@@ -1,4 +1,8 @@
-from utils import load_config, generate_levels, distribute_evenly, worker_one_hot
+from utils import (load_config,
+                   generate_levels,
+                   distribute_evenly,
+                   worker_one_hot,
+                   distribute_elements)
 import torch
 
 
@@ -10,9 +14,10 @@ class EconomicEnv:
         self.interest_rate = self.config['constants']['interest_rate']
         self.device = self.config['device']
         # 所有可能的报价
-        self.quote = self.config['constants']['quote']
+        self.quote_range = self.config['constants']['quote_range']
         self.labor_range = self.config['constants']['labor_range']
         self.consumption_range = self.config['constants']['consumption_range']
+        self.tax_rate_range = self.config['constants']['tax_rate_range']
 
     def reset(self):
         # ========================== 劳动者相关 ==========================
@@ -21,6 +26,9 @@ class EconomicEnv:
                                        self.config['initialize']['worker_asset']).to(self.device)
         # 劳动者技能禀赋
         self.worker_levels = torch.tensor(generate_levels(self.num_worker_agents)).to(self.device)
+        # 劳动者劳动厌恶系数
+        self.worker_labor_aversion = torch.tensor(distribute_elements(
+            self.config['constants']['labor_aversion_range'], self.num_worker_agents)).to(self.device)
         # 劳动者报价
         self.worker_quote = torch.full((self.num_worker_agents,),
                                        self.config['initialize']['quote']).to(self.device)
@@ -106,5 +114,3 @@ class EconomicEnv:
     def scalar_repeat(self, scalar, n: int):
         "将标量扩展为形状为 (n, ) 的张量。"
         return torch.full((n, ), scalar).to(self.device)
-
-

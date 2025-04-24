@@ -47,6 +47,51 @@ def distribute_evenly(total: int, max_label: int) -> List[int]:
     return result
 
 
+def distribute_elements(lst, n):
+    """
+    将输入列表的元素尽可能均匀地分配到一个长度为 n 的列表中。
+
+    参数:
+        lst (list): 输入的列表，其中包含需要分配的元素。
+        n (int): 目标列表的长度。
+
+    返回:
+        list: 长度为 n 的列表，元素尽可能均匀地分配。
+
+    例子:
+        输入:
+            lst = [1, 10, 20]
+            n = 10
+        输出:
+            [1, 10, 20, 1, 10, 20, 1, 10, 20, 1]
+    """
+
+    # 计算总元素个数
+    total_elements = len(lst)
+
+    # 计算每个元素应出现的最小次数
+    base_count = n // total_elements
+
+    # 计算剩余的元素数
+    remainder = n % total_elements
+
+    # 初始化结果列表
+    result = []
+
+    # 为每个元素添加 base_count 次
+    for i in range(total_elements):
+        result.extend([lst[i]] * base_count)
+
+    # 为剩余的元素添加 1 次
+    for i in range(remainder):
+        result.append(lst[i])
+
+    np.random.shuffle(result)
+
+    return result
+
+
+
 def worker_one_hot(num_worker_agents):
     """生成一个单位矩阵，相当于劳动者身份独热编码
     这里假定了计算的时候劳动者是按顺序的，且后续打乱只能在batch层面。
@@ -55,3 +100,4 @@ def worker_one_hot(num_worker_agents):
     维度上拼接
     """
     return torch.eye(num_worker_agents)
+
