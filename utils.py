@@ -14,10 +14,11 @@ def load_config(config_path='config.yaml') -> dict:
 def generate_levels(num_worker_agents) -> list:
     """利用标准正态分布初始化技能禀赋"""
     min_value = 0.5           # 技能禀赋最小值
-    num_worker_agents           # 采样点数量
+    max_value = 2.0           # 技能禀赋最大值
     min_percentile = norm.cdf(min_value)
     # 构造均匀的分位点
-    percentiles = np.linspace(min_percentile, 0.9999, num_worker_agents)
+    max_percentile = norm.cdf(max_value)
+    percentiles = np.linspace(min_percentile, max_percentile, num_worker_agents)
     levels = norm.ppf(percentiles)
     # 随机打乱
     np.random.shuffle(levels)

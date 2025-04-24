@@ -227,16 +227,12 @@ class EconomicEnv:
         weights = inverse_weight_normalized(self.worker_asset)
         transfer_to_worker = self.total_transfer*weights
         # 更新劳动者资产
-        previous_worker_asset = self.worker_asset.clone()
         self.worker_asset = (1+self.interest_rate)*(self.worker_asset+self.pre_tax_wages +
                                                     transfer_to_worker-worker_tax-self.worker_cost)
 
-        # 资产变动额
-        self.asset_change = self.worker_asset-previous_worker_asset
-
         # 计算劳动者效用（相对风险厌恶为0.33固定，1-0.33=0.67），也是奖励
         self.worker_utility = (self.worker_consumption**0.67)/0.67-self.worker_labor_aversion * \
-            self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len+self.asset_change
+            self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len
 
         # 更新劳动者在企业累计工作时长
         self.worker_firm_len = (self.worker_firm_len+self.worker_labor)*(1-self.worker_switch_firm)

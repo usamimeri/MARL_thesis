@@ -137,6 +137,8 @@ def test_government_settlement(env, config):
     print(env.firm_wage)
     print("企业销售额")
     print(env.firm_sales)
+    print("企业工资发放")
+    print(env.firm_wage_cost)
     print("====================================")
     env.government_settlement(government_action)
     print("政府税率")
