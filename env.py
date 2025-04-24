@@ -216,7 +216,7 @@ class EconomicEnv:
         self.tax_rate = self.tax_rate_range[government_action[:, 0]]
         # 企业税前利润，也是效用和奖励
         self.firm_pre_tax_profit = self.firm_sales-self.firm_wage_cost
-        capital_investment = self.firm_capital*(1-self.investment_rate)
+        capital_investment = self.firm_asset*self.investment_rate
         self.firm_asset = self.firm_asset-capital_investment+(1-self.tax_rate)*self.firm_pre_tax_profit
         self.firm_capital = self.firm_capital*(1-self.depreciation_rate)+capital_investment
         # 征税
@@ -236,7 +236,7 @@ class EconomicEnv:
 
         # 计算劳动者效用（相对风险厌恶为0.33固定，1-0.33=0.67），也是奖励
         self.worker_utility = (self.worker_consumption**0.67)/0.67-self.worker_labor_aversion * \
-            self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len
+            self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len+self.asset_change
 
         # 更新劳动者在企业累计工作时长
         self.worker_firm_len = (self.worker_firm_len+self.worker_labor)*(1-self.worker_switch_firm)

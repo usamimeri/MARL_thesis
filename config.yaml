@@ -1,6 +1,6 @@
 constants:
   quote_range: [2,4,6,8,10,12,14,16,18,20] # 报价区间
-  switch_job_penalty: 0.4 # 跳槽惩罚
+  switch_job_penalty: 0.1 # 跳槽惩罚
   labor_aversion_range: [0.2,0.45,0.7] # 劳动厌恶系数
   risk_aversion: 0.33 # 相对风险厌恶
   interest_rate: 0.1 # 银行利率
