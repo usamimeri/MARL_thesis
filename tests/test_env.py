@@ -2,6 +2,7 @@ import torch
 from env import EconomicEnv
 import pytest
 from utils import load_config
+from network import MultiHeadActorCritic
 
 
 @pytest.fixture
@@ -62,4 +63,35 @@ def test_market_clearing(env):
     print(env.firm_sales)
     print(env.worker_cost)
     print(env.worker_consumption)
+    assert env.firm_sales.sum() == env.worker_cost.sum()
+
+
+@pytest.mark.firm
+def test_firm_settlement(env, config):
+    env.reset()
+    worker_net = MultiHeadActorCritic(config["size"]["observation"]["worker"],
+                                      config["size"]["action"]["worker"]).to(env.device)
+    firm_net = MultiHeadActorCritic(config["size"]["observation"]["firm"],
+                                    config["size"]["action"]["firm"]).to(env.device)
+    worker_obs = env.construct_worker_obs()
+    worker_action = worker_net.get_logprob_and_action(worker_obs)[2]
+    firm_obs = env.construct_firm_obs()
+    firm_action = firm_net.get_logprob_and_action(firm_obs)[2]
+    env.worker_settlement(worker_action)
+    print("劳动者工作企业")
+    print(env.worker_in_firm)
+    print("劳动者消费量")
+    print(env.worker_consumption)
+    print("劳动者报价")
+    print(env.worker_quote)
+    env.firm_settlement(firm_action)
+    print("企业生产量")
+    print(env.firm_production)
+    print("企业报价")
+    print(env.firm_quote)
+    print("====================================")
+    print("企业销售额")
+    print(env.firm_sales)
+    print("劳动者成本")
+    print(env.worker_cost)
     assert env.firm_sales.sum() == env.worker_cost.sum()

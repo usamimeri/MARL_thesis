@@ -15,6 +15,7 @@ class EconomicEnv:
         # 所有可能的报价
         self.quote_range = torch.tensor(self.config['constants']['quote_range'], device=self.device)
         self.labor_range = torch.tensor(self.config['constants']['labor_range'], device=self.device)
+        self.wage_range = torch.tensor(self.config['constants']['wage_range'], device=self.device)
         self.consumption_range = torch.tensor(self.config['constants']['consumption_range'], device=self.device)
         self.tax_rate_range = torch.tensor(self.config['constants']['tax_rate_range'], device=self.device)
 
@@ -109,7 +110,6 @@ class EconomicEnv:
             self.worker_consumption.unsqueeze(1),
             self.worker_labor.unsqueeze(1),
             self.worker_quote.unsqueeze(1),
-            self.scalar_repeat(self.marginal_price, self.num_worker_agents).unsqueeze(1)
         ], dim=-1).to(self.device)
         return worker_obs
 
@@ -123,13 +123,11 @@ class EconomicEnv:
         - 上期各企业报价
         """
         firm_obs = torch.cat([
-            self.firm_sell_num.unsqueeze(1),
             self.firm_asset.unsqueeze(1),
             self.firm_pre_tax_profit.unsqueeze(1),
             self.scalar_repeat(self.tax_rate, self.num_firm_agents).unsqueeze(1),
             self.firm_wage.repeat(self.num_firm_agents, 1),
             self.firm_quote.repeat(self.num_firm_agents, 1),
-            self.scalar_repeat(self.marginal_price, self.num_firm_agents).unsqueeze(1)
         ], dim=-1).to(self.device)
         return firm_obs
 
@@ -180,7 +178,18 @@ class EconomicEnv:
             - 计算企业销售额p_{j,t}*C_{j,t}，销量可能来自多个劳动者
         - 工资结算：企业根据劳动量和智能体水平等，发放工资（具体是一个向量和劳动者维度一致）
         """
-        pass
+        self.firm_quote = self.quote_range[firm_action[:, 0]]
+        self.firm_wage = self.wage_range[firm_action[:, 1]]
+        # 计算企业生产量，根据生产函数
+        self.firm_production = ((self.firm_capital**self.firm_capital_elasticity) * \
+            (self.firm_labor**(1-self.firm_capital_elasticity))).floor()
+        # 市场清算
+        self.market_clearing()
+        # 工资结算，对应每个劳动者获得的工资
+        self.pre_tax_wages = self.worker_labor*self.worker_levels*self.firm_wage[self.worker_in_firm]
+        # 计算企业支付出的工资 TODO：这里其实和compute labor实现一样的
+        self.firm_wage_cost = torch.bincount(
+            self.worker_in_firm, weights=self.pre_tax_wages, minlength=self.num_firm_agents).to(self.device)
 
     def government_settlement(self, government_action: torch.Tensor):
         """政府执行动作后结算
@@ -265,7 +274,9 @@ class EconomicEnv:
                     firm_index += 1
             else:  # 已经没有可以成交的订单了
                 break
-
+        # 计算企业销售额
         self.firm_sales = torch.tensor(firm_sales, dtype=torch.float32, device=self.device)
+        # 劳动者消费量
         self.worker_consumption = torch.tensor(worker_consumption, dtype=torch.float32, device=self.device)
+        # 劳动者总开销
         self.worker_cost = torch.tensor(worker_cost, dtype=torch.float32, device=self.device)
