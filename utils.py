@@ -92,12 +92,3 @@ def distribute_elements(lst, n):
 
 
 
-def worker_one_hot(num_worker_agents):
-    """生成一个单位矩阵，相当于劳动者身份独热编码
-    这里假定了计算的时候劳动者是按顺序的，且后续打乱只能在batch层面。
-    一般rollout时维度是(seq_len,num_worker_agents,state_dim)
-    这里生成的是(num_worker_agents,num_worker_agents)的矩阵，才可以在最后一个
-    维度上拼接
-    """
-    return torch.eye(num_worker_agents)
-

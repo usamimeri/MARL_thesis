@@ -37,3 +37,29 @@ def test_worker_obs_shape(env, config):
     env.reset()
     obs = env.construct_worker_obs()
     assert obs.shape == (env.num_worker_agents, config["size"]["observation"]["worker"])
+
+
+def test_firm_obs_shape(env, config):
+    env.reset()
+    obs = env.construct_firm_obs()
+    assert obs.shape == (env.num_firm_agents, config["size"]["observation"]["firm"])
+
+
+def test_government_obs_shape(env, config):
+    env.reset()
+    obs = env.construct_government_obs()
+    assert obs.shape == (1, config["size"]["observation"]["government"])
+
+
+@pytest.mark.market
+def test_market_clearing(env):
+    env.reset()
+    env.worker_consumption = torch.tensor([20, 10, 5], dtype=torch.float32).to(env.device)  # num_worker
+    env.worker_quote = torch.tensor([100, 90, 80], dtype=torch.float32).to(env.device)  # num_worker
+    env.firm_production = torch.tensor([10, 15, 10], dtype=torch.float32).to(env.device)  # num_firm
+    env.firm_quote = torch.tensor([70, 75, 120], dtype=torch.float32).to(env.device)  # num_firm
+    env.market_clearing()
+    print(env.firm_sales)
+    print(env.worker_cost)
+    print(env.worker_consumption)
+    assert env.firm_sales.sum() == env.worker_cost.sum()
