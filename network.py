@@ -52,6 +52,8 @@ class MultiHeadActor(nn.Module):
         logprobs: (num_agent,)
         entropy: (num_agent,)
         action: (num_agent,num_action)
+
+        其中action的顺序为：消费，劳动，报价，工作企业
         """
         x = self.backbone(state)
         probs = [Categorical(logits=head(x)) for head in self.heads]
@@ -82,3 +84,4 @@ class MultiHeadActorCritic(nn.Module):
 
     def get_value(self, state):
         return self.critic.get_value(state)
+

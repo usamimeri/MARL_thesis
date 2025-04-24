@@ -14,10 +14,10 @@ class EconomicEnv:
         self.interest_rate = self.config['constants']['interest_rate']
         self.device = self.config['device']
         # 所有可能的报价
-        self.quote_range = self.config['constants']['quote_range']
-        self.labor_range = self.config['constants']['labor_range']
-        self.consumption_range = self.config['constants']['consumption_range']
-        self.tax_rate_range = self.config['constants']['tax_rate_range']
+        self.quote_range = torch.tensor(self.config['constants']['quote_range']).to(self.device)
+        self.labor_range = torch.tensor(self.config['constants']['labor_range']).to(self.device)
+        self.consumption_range = torch.tensor(self.config['constants']['consumption_range']).to(self.device)
+        self.tax_rate_range = torch.tensor(self.config['constants']['tax_rate_range']).to(self.device)
 
     def reset(self):
         # ========================== 劳动者相关 ==========================
@@ -54,9 +54,12 @@ class EconomicEnv:
         # 各企业工资水平
         self.firm_wage = torch.full((self.num_firm_agents,),
                                     self.config['initialize']['wage']).to(self.device)
+        # 各企业销售量
         self.firm_sell = torch.zeros((self.num_firm_agents,)).to(self.device)
         # 企业税前利润
         self.firm_pre_tax_profit = torch.zeros((self.num_firm_agents,)).to(self.device)
+        # 各企业所拥有的劳动量
+        self.firm_labor = torch.zeros((self.num_firm_agents,)).to(self.device)
         # ========================== 政府相关 ==========================
         # 政府税率
         self.tax_rate = self.config['initialize']['tax_rate']
@@ -78,9 +81,7 @@ class EconomicEnv:
 
     def judge_switch_firm(self, next_worker_in_firm):
         """判断劳动者是否跳槽，若跳槽则对应向量位置为1"""
-        self.worker_switch_firm = torch.where(self.worker_in_firm != next_worker_in_firm,
-                                              torch.ones(self.num_worker_agents, dtype=torch.long),
-                                              torch.zeros(self.num_worker_agents, dtype=torch.long)).to(self.device)
+        return (self.worker_in_firm != next_worker_in_firm).long().to(self.device)
 
     def construct_worker_obs(self):
         """构造劳动者的部分观测
@@ -114,3 +115,22 @@ class EconomicEnv:
     def scalar_repeat(self, scalar, n: int):
         "将标量扩展为形状为 (n, ) 的张量。"
         return torch.full((n, ), scalar).to(self.device)
+
+    def worker_settlement(self, worker_action: torch.Tensor):
+        """劳动者执行后结算：
+        - 各个公司的劳动总量
+        - 存储劳动者的报价报量，等待市场结算
+        - 劳动者跳槽指示更新
+          其中action的顺序为：消费，劳动，报价，工作企业
+        """
+
+        self.worker_consumption = self.consumption_range[worker_action[:, 0]]
+        self.worker_labor = self.labor_range[worker_action[:, 1]]
+        self.worker_quote = self.quote_range[worker_action[:, 2]]
+        # 跳槽指示
+        next_worker_in_firm = worker_action[:, 3]
+        self.worker_switch_firm = self.judge_switch_firm(next_worker_in_firm=next_worker_in_firm)
+        # 更新劳动者所属企业
+        self.worker_in_firm = next_worker_in_firm
+        # 各个公司的劳动总量
+        self.firm_labor = self.compute_firm_labor()
