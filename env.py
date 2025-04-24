@@ -17,10 +17,10 @@ class EconomicEnv:
     def reset(self):
         # ========================== 劳动者相关 ==========================
         # 劳动者资产
-        self.worker_asset = torch.full((self.num_worker_agents,),
+        self.worker_asset = torch.full((self.num_worker_agents, ),
                                        self.config['initialize']['worker_asset']).to(self.device)
         # 劳动者技能禀赋
-        self.worker_levels = generate_levels(self.num_worker_agents)
+        self.worker_levels = torch.tensor(generate_levels(self.num_worker_agents)).to(self.device)
         # 劳动者报价
         self.worker_quote = torch.full((self.num_worker_agents,),
                                        self.config['initialize']['quote']).to(self.device)
@@ -70,6 +70,41 @@ class EconomicEnv:
 
     def judge_switch_firm(self, next_worker_in_firm):
         """判断劳动者是否跳槽，若跳槽则对应向量位置为1"""
-        return torch.where(self.worker_in_firm != next_worker_in_firm,
-                           torch.ones(self.num_worker_agents, dtype=torch.long),
-                           torch.zeros(self.num_worker_agents, dtype=torch.long)).to(self.device)
+        self.worker_switch_firm = torch.where(self.worker_in_firm != next_worker_in_firm,
+                                              torch.ones(self.num_worker_agents, dtype=torch.long),
+                                              torch.zeros(self.num_worker_agents, dtype=torch.long)).to(self.device)
+
+    def construct_worker_obs(self):
+        """构造劳动者的部分观测
+        一般观测的维度是(num_agents,state_dim)
+        - 本期资产
+        - 目前工作企业
+        - 本期政府税率
+        - 上期边际价格
+        - 上期各企业工资水平
+        - 身份独热编码
+        - 上期消费量
+        - 上期劳动量
+        - 上期报价
+
+        输出维度为(num_worker_agents,worker_obs_dim)
+        其中worker_obs_dim=config["size"]["observation"]["worker"]
+        """
+        worker_obs = torch.cat([
+            self.worker_asset.unsqueeze(1),
+            self.worker_in_firm.unsqueeze(1),
+            self.scalar_repeat(self.tax_rate, self.num_worker_agents).unsqueeze(1),
+            self.scalar_repeat(self.marginal_price, self.num_worker_agents).unsqueeze(1),
+            self.firm_wage.repeat(self.num_worker_agents, 1),
+            self.worker_one_hot,
+            self.worker_consumption.unsqueeze(1),
+            self.worker_labor.unsqueeze(1),
+            self.worker_quote.unsqueeze(1)
+        ], dim=-1).to(self.device)
+        return worker_obs
+
+    def scalar_repeat(self, scalar, n: int):
+        "将标量扩展为形状为 (n, ) 的张量。"
+        return torch.full((n, ), scalar).to(self.device)
+
+

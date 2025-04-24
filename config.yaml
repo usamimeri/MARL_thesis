@@ -23,7 +23,7 @@ size:
     firm: [10,10] # 单位劳动工资、报价
     government: 10 # 税率
   observation:
-    worker: 16 # 1+1+1+1+4+10
+    worker: 21 # 1+1+1+1+4+10+1+1+1
     firm: 12 # 1+1+1+1+4+4
     government: 20 # 10+4+4+1+1
 

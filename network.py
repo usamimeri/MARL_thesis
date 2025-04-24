@@ -14,7 +14,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 
 
-class Critic:
+class Critic(nn.Module):
     def __init__(self, state_dim: int):
         super().__init__()
         self.net = nn.Sequential(
@@ -29,7 +29,7 @@ class Critic:
         return self.net(state)
 
 
-class MultiHeadActor:
+class MultiHeadActor(nn.Module):
     def __init__(self, state_dim: int, action_dim: list | int):
         super().__init__()
         self.state_dim = state_dim
@@ -71,7 +71,7 @@ class MultiHeadActor:
         return logprobs, entropy, action
 
 
-class MultiHeadActorCritic:
+class MultiHeadActorCritic(nn.Module):
     def __init__(self, state_dim: int, action_dim: list | int):
         super().__init__()
         self.actor = MultiHeadActor(state_dim, action_dim)
