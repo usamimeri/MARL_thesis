@@ -69,7 +69,7 @@ class MultiHeadActor(nn.Module):
         entropy = torch.stack([prob.entropy() for prob in probs], dim=-1)
         # \log\pi_{a|s}=log\pi_{a_1|s}+log\pi_{a_2|s}+...+log\pi_{a_n|s}
         logprobs = logprobs.sum(dim=-1)
-        entropy = entropy.sum(dim=-1)
+        entropy = entropy.mean(dim=-1)
         return logprobs, entropy, action
 
 

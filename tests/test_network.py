@@ -74,13 +74,14 @@ def test_multiheadactor_three_dim_input_single_action_dim():
 
 
 def test_multiheadactor_three_dim_input_multiple_action_dim():
-    state_dim = 4
+    state_dim = 10
     action_dims = [2, 3, 4]
     batch_size = 3
-    num_agents = 5
+    num_agents = 10
     actor = MultiHeadActor(state_dim, action_dims)
     state = torch.randn(batch_size, num_agents, state_dim)
     logprobs, entropy, action = actor.get_logprob_and_action(state)
+    print(entropy)
     assert action.shape == (batch_size, num_agents, len(action_dims))
     assert logprobs.shape == (batch_size, num_agents)
     assert entropy.shape == (batch_size, num_agents)

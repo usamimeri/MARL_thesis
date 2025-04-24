@@ -240,7 +240,7 @@ class EconomicEnv:
 
         # 更新劳动者在企业累计工作时长
         self.worker_firm_len = (self.worker_firm_len+self.worker_labor)*(1-self.worker_switch_firm)
-        self.social_efficiency = torch.sigmoid(self.worker_utility.sum()+self.firm_pre_tax_profit.sum())
+        self.social_efficiency = torch.sigmoid(self.worker_utility.mean())
         self.equality = 1-(self.num_worker_agents)/(self.num_worker_agents-1)*gini(self.pre_tax_wages)
         self.government_reward = ((self.equality)**self.swf_eq_param)*(self.social_efficiency**(1-self.swf_eq_param))
 
