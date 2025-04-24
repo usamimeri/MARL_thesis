@@ -230,13 +230,13 @@ class EconomicEnv:
         self.worker_asset = (1+self.interest_rate)*(self.worker_asset+self.pre_tax_wages +
                                                     transfer_to_worker-worker_tax-self.worker_cost)
 
-        # 计算劳动者效用（相对风险厌恶为0.33固定，1-0.33=0.67），也是奖励
-        self.worker_utility = (self.worker_consumption**0.67)/0.67-self.worker_labor_aversion * \
+        # 计算劳动者效用（相对风险厌恶为0.1固定，1-0.1=0.9），也是奖励
+        self.worker_utility = (self.worker_consumption**0.9)/0.9-self.worker_labor_aversion * \
             self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len
 
-        # 更新劳动者在企业累计工作时长
+
         self.worker_firm_len = (self.worker_firm_len+self.worker_labor)*(1-self.worker_switch_firm)
-        self.social_efficiency = torch.sigmoid(self.worker_utility.mean())
+        self.social_efficiency = torch.sigmoid(self.worker_utility.sum())
         self.equality = 1-(self.num_worker_agents)/(self.num_worker_agents-1)*gini(self.pre_tax_wages)
         self.government_reward = ((self.equality)**self.swf_eq_param)*(self.social_efficiency**(1-self.swf_eq_param))
 

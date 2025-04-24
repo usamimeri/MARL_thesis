@@ -119,3 +119,39 @@ def gini(x: torch.Tensor) -> float:
     index = torch.arange(1, n + 1, dtype=torch.float32, device=x.device)
     gini = (torch.sum((2 * index - n - 1) * x_sorted)) / (n * torch.sum(x_sorted))
     return gini
+
+
+class RunningMeanStd(torch.nn.Module):
+    def __init__(self, shape: tuple):
+        super(RunningMeanStd, self).__init__()
+        self.mean = torch.zeros(shape, dtype=torch.float64)  # 每列的均值
+        self.var = torch.ones(shape, dtype=torch.float64)    # 每列的方差，初始化为1
+        self.count = 1e-4                                 # 初始化计数，防止第一次除零
+
+    def update(self, x):
+        batch_mean = x.mean(dim=0)  # 计算输入x在第一个维度（batch维度）上的均值
+        batch_var = x.var(dim=0, unbiased=False)  # 计算输入x在第一个维度上的方差，unbiased=False时为样本方差
+        batch_count = x.size(0)  # 获取x中的数据点数量（即batch大小）
+        self.update_from_moments(batch_mean, batch_var, batch_count)  # 更新均值和方差
+
+    def update_from_moments(self, batch_mean, batch_var, batch_count):
+        # 使用增量更新公式更新mean, var, count
+        self.mean, self.var, self.count = update_mean_var_count_from_moments(
+            self.mean, self.var, self.count, batch_mean, batch_var, batch_count)
+
+
+def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, batch_count):
+    delta = batch_mean - mean  # 新旧均值的差
+    tot_count = count + batch_count  # 总数据点数
+
+    # 更新均值
+    new_mean = mean + delta * batch_count / tot_count
+
+    # 更新方差
+    m_a = var * count
+    m_b = batch_var * batch_count
+    M2 = m_a + m_b + (delta ** 2) * count * batch_count / tot_count  # 计算M2
+    new_var = M2 / tot_count  # 归一化方差
+    new_count = tot_count  # 更新总数据点数
+
+    return new_mean, new_var, new_count
