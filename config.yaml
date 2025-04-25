@@ -32,8 +32,9 @@ train:
   clip_param: 0.2 # PPO裁剪参数
   vf_coef: 0.5 # 价值函数系数
   max_grad_norm: 0.5 # 梯度裁剪
-  total_timesteps: 10000 # 总训练步数
+  total_timesteps: 100000 # 总训练步数
   seed: 20021117
+  annealing_lr: True # 是否退火
 
 
 

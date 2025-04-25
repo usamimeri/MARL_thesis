@@ -43,7 +43,7 @@ class MultiHeadActor(nn.Module):
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
         )
-        self.heads = nn.ModuleList([nn.Linear(64, a_dim) for a_dim in self.action_dim])
+        self.heads = nn.ModuleList([layer_init(nn.Linear(64, a_dim), std=0.01) for a_dim in self.action_dim])
 
     def get_logprob_and_action(self, state, action=None):
         """

@@ -137,13 +137,13 @@ class RolloutBuffer(BaseBuffer):
     rollout_buffer.compute_returns_and_advantage(last_values=values)
 
     """
-    observations: np.ndarray
-    actions: np.ndarray
-    rewards: np.ndarray
-    advantages: np.ndarray
-    returns: np.ndarray
-    log_probs: np.ndarray
-    values: np.ndarray
+    observations: np.ndarray # (num_agent,state_dim)
+    actions: np.ndarray # (num_agent,action_dim)
+    rewards: np.ndarray # (num_agent)
+    advantages: np.ndarray # (num_agent)
+    returns: np.ndarray # (num_agent)
+    log_probs: np.ndarray # (num_agent)
+    values: np.ndarray # (num_agent)
 
     def __init__(
         self,
