@@ -4,9 +4,16 @@ from utils import RunningMeanStd, load_config
 import warnings
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Generator, List, Optional, Union
+import os
 
 import numpy as np
 import torch as th
+import pandas as pd
+
+config = load_config()
+mapping = {config["num_worker_agents"]: "worker",
+           config["num_firm_agents"]: "firm",
+           1: "government"}
 
 
 class RolloutData(NamedTuple):
@@ -264,17 +271,40 @@ class RolloutBuffer(BaseBuffer):
         )
         return RolloutData(*tuple(map(self.to_torch, data)))
 
+    def save(self, to_csv=True):
+        """保存要用于训练的数据到本地，便于观察"""
+        prefix = mapping.get(self.num_agents, "Unknown")
+        os.makedirs(f"./data/{prefix}", exist_ok=True)
+        path = f"./data/{prefix}"
+        if to_csv:
+            # 二维的数据专门放一个csv，TODO:由于obs和action三维，这里后面再实现
+            # obs和action的数据目前先保存起始，中间，最终步的数据
+            start_obs = pd.DataFrame(self.observations[0]).T.round(2)
+            mid_obs = pd.DataFrame(self.observations[self.buffer_size//2]).T.round(2)
+            final_obs = pd.DataFrame(self.observations[-1]).T.round(2)
+            reward_df = pd.DataFrame(self.rewards).round(2)
+            return_df = pd.DataFrame(self.returns).round(2)
+            start_obs.to_csv(os.path.join(path, f"{prefix}_start_obs.csv"), index=False)
+            mid_obs.to_csv(os.path.join(path, f"{prefix}_mid_obs.csv"), index=False)
+            final_obs.to_csv(os.path.join(path, f"{prefix}_final_obs.csv"), index=False)
+            reward_df.to_csv(os.path.join(path, f"{prefix}_reward.csv"), index=False)
+            return_df.to_csv(os.path.join(path, f"{prefix}_return.csv"), index=False)
+        else:
+            raise NotImplementedError("暂时只支持保存为csv")
+        return True
+
 
 if __name__ == "__main__":
     buffer = RolloutBuffer(buffer_size=5, obs_dim=4, action_dim=2, num_agents=2)
     for _ in range(5):
         buffer.add(obs=np.random.randn(2, 4), action=np.random.randn(
-            2, 2), reward=np.random.randint(0, 10, size=2), value=th.randn(2), log_prob=th.randn(2))
+            2, 2), reward=np.random.randint(0, 10, size=2), value=th.randn(2), log_prob=th.randn(2), episode_start=np.zeros(2))
 
     last_values = th.randn(2)
-    buffer.compute_returns_and_advantage(last_values=last_values)
-    for data in buffer.get(batch_size=2):
-        for j in [data.observations, data.actions, data.old_values, data.old_log_prob, data.advantages, data.returns]:
-            print(j)
-            print("-"*100)
-        break
+    buffer.compute_returns_and_advantage(last_values=last_values, dones=np.zeros(2))
+    buffer.save(to_csv=True)
+    # for data in buffer.get(batch_size=2):
+    #     for j in [data.observations, data.actions, data.old_values, data.old_log_prob, data.advantages, data.returns]:
+    #         print(j)
+    #         print("-"*100)
+    #     break

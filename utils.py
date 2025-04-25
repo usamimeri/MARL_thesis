@@ -3,6 +3,8 @@ import yaml
 import numpy as np
 from scipy.stats import norm
 import torch
+import wandb
+from datetime import datetime
 import random
 
 
@@ -148,6 +150,8 @@ class RunningMeanStd(object):
     new_batch=(batch-rms.mean)/np.sqrt(rms.var)
     rms.update(new_batch)
     ```
+
+    shape为状态维度
     """
 
     def __init__(self, epsilon=1e-4, shape=()):
@@ -156,6 +160,8 @@ class RunningMeanStd(object):
         self.count = epsilon
 
     def update(self, x):
+        if isinstance(x, (float, int)):
+            x = np.array([x])
         batch_mean = np.mean(x, axis=0)
         batch_var = np.var(x, axis=0)
         batch_count = x.shape[0]
@@ -187,3 +193,24 @@ def seed_everything(seed: int):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
+
+
+def init_wandb():
+    config = load_config()
+    wandb.init(
+        project="ppo-learning",
+        name=f"Economic-PPO-{datetime.now().strftime('%m-%d_%H-%M')}",
+        config=config,
+    )
+
+
+def wandb_log(name: str, entropy_loss_mean, pg_loss_mean, vf_loss_mean, approx_kl_mean, loss_mean):
+    wandb.log({
+        f"{name}/entropy_loss_mean": entropy_loss_mean,
+        f"{name}/pg_loss_mean": pg_loss_mean,
+        f"{name}/vf_loss_mean": vf_loss_mean,
+        f"{name}/approx_kl_mean": approx_kl_mean,
+        f"{name}/loss_mean": loss_mean,
+    })
+
+

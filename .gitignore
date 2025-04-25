@@ -175,4 +175,5 @@ cython_debug/
 
 test.ipynb
 
-wandb``
+wandb/
+data/

@@ -3,15 +3,14 @@ constants:
   switch_job_penalty: 0.01 # 跳槽惩罚
   labor_aversion_range: [0.2,0.45,0.7] # 劳动厌恶系数
   risk_aversion: 0.33 # 相对风险厌恶
-  interest_rate: 0.1 # 银行利率
   tax_rate_range: [0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4] #政府税率
   equality_param: 0.5 # 公平效率系数
   labor_range: [10,20,30,40,50,60,70,80,90,100] # 劳动者劳动量
   consumption_range: [20,40,60,80,100,120,140,160,180,200] # 劳动者消费量
-  wage_range: [1,2,3,4,5,6,7,8,9,10] # 劳动者工资
+  wage_range: [2,4,6,8,10,12,14,16,18,20] # 劳动者工资
   captial_elasticity: [0.25,0.45,0.7] # 资本弹性
 
-  depreciation_rate: 0.1 # 折旧率
+  depreciation_rate: 0.01 # 折旧率
   investment_rate: 0.03 # 资产用于投资的比率
   swf_eq_param: 0.5 # 社会福利函数公平效率系数
 
@@ -19,21 +18,21 @@ constants:
 # 一些训练相关的参数
 train:
   gamma: 0.99 # 折扣因子
-  lambda: 0.95 # GAE参数
+  lambda: 0.98 # GAE参数
   num_steps: 128 # 一轮rollout的步数
   n_minibatches: 4 # 训练时分的batch数
-  worker_lr: 0.001 # 劳动者学习率
-  firm_lr: 0.001 # 企业学习率
+  worker_lr: 0.0005 # 劳动者学习率
+  firm_lr: 0.0005 # 企业学习率
   government_lr: 0.0005
   entropy_coef_start: 0.5 # 熵正则化系数起始
   entropy_coef_end: 0.01 # 熵正则化系数退火结果
   ent_coef: 0.01 #若是固定系数，则设置为0.05
-  ppo_update: 4 # 更新次数
+  ppo_update: 2 # 更新次数
   clip_param: 0.2 # PPO裁剪参数
   vf_coef: 0.5 # 价值函数系数
   max_grad_norm: 0.5 # 梯度裁剪
-  total_timesteps: 200000 # 总训练步数
-  seed: 42
+  total_timesteps: 100000 # 总训练步数
+  seed: 20021117
   annealing_lr: True # 是否退火
 
 
@@ -51,11 +50,11 @@ size:
 
 initialize:
   quote: 10.0 # 初始报价
-  worker_asset: 2000.0 # 初始工人资产
-  firm_asset: 5000.0 # 初始企业资产
-  firm_capital: 500 # 初始企业资本
+  worker_asset: 3000.0 # 初始工人资产
+  firm_asset: 15000.0 # 初始企业资产
+  firm_capital: 1000 # 初始企业资本
   tax_rate: 0.10 # 初始税率
-  wage: 5.0 # 初始工资
+  wage: 10.0 # 初始工资
 
 device: cuda
 num_worker_agents: 10
