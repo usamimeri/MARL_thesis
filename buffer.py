@@ -31,14 +31,13 @@ class BaseBuffer(ABC):
         num_agents: int = 1,
     ):
         super().__init__()
-        self.config = load_config()
         self.buffer_size = buffer_size
         self.obs_dim = obs_dim
         self.action_dim = action_dim
 
         self.pos = 0
         self.full = False
-        self.device = self.config["device"]
+        self.device = "cuda" if th.cuda.is_available() else "cpu"
         self.num_agents = num_agents
 
     @staticmethod
@@ -151,13 +150,12 @@ class RolloutBuffer(BaseBuffer):
         buffer_size: int,
         obs_dim: int,
         action_dim: int,
-        gae_lambda: float = 1,
-        gamma: float = 0.99,
         num_agents: int = 1,
     ):
         super().__init__(buffer_size, obs_dim, action_dim, num_agents=num_agents)
-        self.gae_lambda = gae_lambda
-        self.gamma = gamma
+        self.config = load_config()
+        self.gae_lambda = self.config["constants"]["lambda"]
+        self.gamma = self.config["constants"]["gamma"]
         self.generator_ready = False
         self.reset()
 

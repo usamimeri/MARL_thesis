@@ -32,7 +32,7 @@ size:
 
 initialize:
   quote: 10.0 # 初始报价
-  worker_asset: 1000.0 # 初始工人资产
+  worker_asset: 2000.0 # 初始工人资产
   firm_asset: 5000.0 # 初始企业资产
   firm_capital: 500 # 初始企业资本
   tax_rate: 0.10 # 初始税率

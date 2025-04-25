@@ -6,25 +6,38 @@ from utils import (load_config,
                    gini,
                    sigmoid)
 import numpy as np
+from utils import RunningMeanStd
 
 
 class EconomicEnv:
     def __init__(self):
         self.config = load_config()
+        self.device = self.config['device']
+        # ============================一些固定参数==========================
         self.num_worker_agents = self.config['num_worker_agents']
         self.num_firm_agents = self.config['num_firm_agents']
         self.interest_rate = self.config['constants']['interest_rate']
-        self.device = self.config['device']
         self.investment_rate = self.config['constants']['investment_rate']
         self.depreciation_rate = self.config['constants']['depreciation_rate']
         self.switch_job_penalty = self.config['constants']['switch_job_penalty']
         self.swf_eq_param = self.config['constants']['swf_eq_param']
-        # 所有可能的报价
+        # ============================一些范围参数==========================
         self.quote_range = np.array(self.config['constants']['quote_range'])
         self.labor_range = np.array(self.config['constants']['labor_range'])
         self.wage_range = np.array(self.config['constants']['wage_range'])
         self.consumption_range = np.array(self.config['constants']['consumption_range'])
         self.tax_rate_range = np.array(self.config['constants']['tax_rate_range'])
+
+        # ====================== 用于标准化输入状态 ==========================
+        # 用于标准化输入状态
+        self.rms_worker = RunningMeanStd(shape=(self.num_worker_agents,))
+        self.rms_firm = RunningMeanStd(shape=(self.num_firm_agents,))
+        self.rms_government = RunningMeanStd(shape=(1,))
+
+        # 用于标准化奖励
+        self.rms_worker_reward = RunningMeanStd(shape=(self.num_worker_agents,))
+        self.rms_firm_reward = RunningMeanStd(shape=(self.num_firm_agents,))
+        self.rms_government_reward = RunningMeanStd(shape=(1,))
 
     def reset(self):
         # ========================== 劳动者相关 ==========================
@@ -120,7 +133,7 @@ class EconomicEnv:
             self.worker_consumption[:, np.newaxis],
             self.worker_labor[:, np.newaxis],
             self.worker_quote[:, np.newaxis],
-        ], axis=-1)
+        ], axis=-1).astype(np.float32)
         return worker_obs
 
     def construct_firm_obs(self):
@@ -139,7 +152,7 @@ class EconomicEnv:
             # (num_firm)->(1,num_firm)->(num_firm,num_firm)
             self.firm_wage[np.newaxis, :].repeat(self.num_firm_agents, axis=0),
             self.firm_quote[np.newaxis, :].repeat(self.num_firm_agents, axis=0),
-        ], axis=-1)
+        ], axis=-1).astype(np.float32)
         return firm_obs
 
     def construct_government_obs(self):
@@ -157,7 +170,7 @@ class EconomicEnv:
             self.firm_wage,
             np.array([self.total_transfer]),
             np.array([self.tax_rate])
-        ])[np.newaxis, :]
+        ])[np.newaxis, :].astype(np.float32)
         return government_obs
 
     def worker_settlement(self, worker_action: np.ndarray):
@@ -214,7 +227,7 @@ class EconomicEnv:
         - 计算社会公平性（根据基尼系数）
         - 计算政府奖励
         """
-        self.tax_rate = self.tax_rate_range[government_action[:, 0]]
+        self.tax_rate = self.tax_rate_range[government_action[:, 0]].item()
         # 企业税前利润，也是效用和奖励
         self.firm_pre_tax_profit = self.firm_sales-self.firm_wage_cost
         capital_investment = self.firm_asset*self.investment_rate
