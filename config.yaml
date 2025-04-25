@@ -19,7 +19,7 @@ constants:
 # 一些训练相关的参数
 train:
   gamma: 0.99 # 折扣因子
-  lambda: 0.98 # GAE参数
+  lambda: 0.95 # GAE参数
   num_steps: 128 # 一轮rollout的步数
   n_minibatches: 4 # 训练时分的batch数
   worker_lr: 0.001 # 劳动者学习率
@@ -27,13 +27,13 @@ train:
   government_lr: 0.0005
   entropy_coef_start: 0.5 # 熵正则化系数起始
   entropy_coef_end: 0.01 # 熵正则化系数退火结果
-  ent_coef: 0.05 #若是固定系数，则设置为0.05
+  ent_coef: 0.01 #若是固定系数，则设置为0.05
   ppo_update: 4 # 更新次数
   clip_param: 0.2 # PPO裁剪参数
   vf_coef: 0.5 # 价值函数系数
   max_grad_norm: 0.5 # 梯度裁剪
-  total_timesteps: 100000 # 总训练步数
-  seed: 20021117
+  total_timesteps: 200000 # 总训练步数
+  seed: 42
   annealing_lr: True # 是否退火
 
 

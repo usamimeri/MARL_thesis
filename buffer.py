@@ -39,6 +39,7 @@ class BaseBuffer(ABC):
         self.full = False
         self.device = self.config["device"]
         self.num_agents = num_agents
+        self._last_episode_starts = None
 
     @staticmethod
     def swap_and_flatten(arr: np.ndarray) -> np.ndarray:
@@ -137,13 +138,14 @@ class RolloutBuffer(BaseBuffer):
     rollout_buffer.compute_returns_and_advantage(last_values=values)
 
     """
-    observations: np.ndarray # (num_agent,state_dim)
-    actions: np.ndarray # (num_agent,action_dim)
-    rewards: np.ndarray # (num_agent)
-    advantages: np.ndarray # (num_agent)
-    returns: np.ndarray # (num_agent)
-    log_probs: np.ndarray # (num_agent)
-    values: np.ndarray # (num_agent)
+    observations: np.ndarray  # (num_agent,state_dim)
+    actions: np.ndarray  # (num_agent,action_dim)
+    rewards: np.ndarray  # (num_agent)
+    advantages: np.ndarray  # (num_agent)
+    returns: np.ndarray  # (num_agent)
+    log_probs: np.ndarray  # (num_agent)
+    values: np.ndarray  # (num_agent)
+    episode_starts: np.ndarray  # (num_agent) 标志是否为结束状态
 
     def __init__(
         self,
@@ -167,22 +169,28 @@ class RolloutBuffer(BaseBuffer):
         self.values = np.zeros((self.buffer_size, self.num_agents), dtype=np.float32)
         self.log_probs = np.zeros((self.buffer_size, self.num_agents), dtype=np.float32)
         self.advantages = np.zeros((self.buffer_size, self.num_agents), dtype=np.float32)
+        self.episode_starts = np.zeros((self.buffer_size, self.num_agents), dtype=np.float32)
+        self._last_episode_starts = np.ones((self.num_agents,), dtype=bool)
         self.generator_ready = False
         super().reset()
 
-    def compute_returns_and_advantage(self, last_values: th.Tensor) -> None:
+    def compute_returns_and_advantage(self, last_values: th.Tensor,  dones: np.ndarray) -> None:
         # Convert to numpy
-        last_values = last_values.clone().cpu().numpy().flatten()
+        last_values = last_values.clone().cpu().numpy().flatten()  # type: ignore[assignment]
 
         last_gae_lam = 0
         for step in reversed(range(self.buffer_size)):
             if step == self.buffer_size - 1:
+                next_non_terminal = 1.0 - dones.astype(np.float32)
                 next_values = last_values
             else:
+                next_non_terminal = 1.0 - self.episode_starts[step + 1]
                 next_values = self.values[step + 1]
-            delta = self.rewards[step] + self.gamma * next_values - self.values[step]
-            last_gae_lam = delta + self.gamma * self.gae_lambda * last_gae_lam
+            delta = self.rewards[step] + self.gamma * next_values * next_non_terminal - self.values[step]
+            last_gae_lam = delta + self.gamma * self.gae_lambda * next_non_terminal * last_gae_lam
             self.advantages[step] = last_gae_lam
+        # TD(lambda) estimator, see Github PR #375 or "Telescoping in TD(lambda)"
+        # in David Silver Lecture 4: https://www.youtube.com/watch?v=PnHCvfgC_ZA
         self.returns = self.advantages + self.values
 
     def add(
@@ -192,6 +200,7 @@ class RolloutBuffer(BaseBuffer):
         reward: np.ndarray,
         value: th.Tensor,
         log_prob: th.Tensor,
+        episode_start: np.ndarray,
     ) -> None:
         """
         :param obs: Observation
@@ -201,6 +210,7 @@ class RolloutBuffer(BaseBuffer):
             following the current policy.
         :param log_prob: log probability of the action
             following the current policy.
+        :param episode_start: 标志是否为结束状态
         """
 
         self.observations[self.pos] = np.array(obs).copy()
@@ -208,6 +218,7 @@ class RolloutBuffer(BaseBuffer):
         self.rewards[self.pos] = np.array(reward).copy()
         self.values[self.pos] = value.clone().cpu().numpy().flatten()
         self.log_probs[self.pos] = log_prob.clone().cpu().numpy()
+        self.episode_starts[self.pos] = np.array(episode_start).copy()
         self.pos += 1
         if self.pos == self.buffer_size:
             self.full = True

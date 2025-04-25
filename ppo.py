@@ -57,6 +57,7 @@ class PPO:
             for data in self.buffer.get(self.minibatch_size):
                 logprobs, entropy, actions = self.network.get_logprob_and_action(
                     data.observations)
+                # 维度是(num_agent,1)
                 values = self.network.get_value(data.observations)
                 # 标准化优势函数
                 advantages = data.advantages
@@ -71,10 +72,10 @@ class PPO:
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
                 # 价值损失
-                vf_loss = F.mse_loss(values, data.returns)
-                entropy_loss = -entropy.mean()
+                vf_loss = (0.5*(values.view(-1)-data.returns)**2).mean()
+                entropy_loss = entropy.mean()
                 # 总损失
-                loss = pg_loss+self.vf_coef*vf_loss+self.ent_coef*entropy_loss
+                loss = pg_loss+self.vf_coef*vf_loss-self.ent_coef*entropy_loss
 
                 with torch.no_grad():
                     log_ratio = logprobs-data.old_log_prob

@@ -59,21 +59,31 @@ class MultiHeadActor(nn.Module):
         其中action的顺序为：消费，劳动，报价，工作企业
         """
         x = self.backbone(state)
-        probs = [Categorical(logits=head(x)) for head in self.heads]
+        multi_probs = [F.softmax(head(x), dim=-1) for head in self.heads]
+        actions = []
+        sum_logprobs = 0
+        sum_entropy = 0
         if action is None:
-            # 例如一共四个动作，则一个智能体是[4]，一般输入是(num_agent,state_dim)
-            # 一个头输出是(num_agent,1)，因此在最后一维堆叠
-            # 输出为(num_agent,num_action)
-            action = torch.stack([prob.sample() for prob in probs], dim=-1)
-        # 单个头的prob是(num_agent,action_size),由于MultiDiscrete所以是例如
-        # (5,10)，(5,10)，(5,10)，(5,4)
-        # 这里得到对应每个动作的对数概率，输出为(num_agent,num_action)
-        logprobs = torch.stack([prob.log_prob(action[..., i]) for i, prob in enumerate(probs)], dim=-1)
-        entropy = torch.stack([prob.entropy() for prob in probs], dim=-1)
-        # \log\pi_{a|s}=log\pi_{a_1|s}+log\pi_{a_2|s}+...+log\pi_{a_n|s}
-        logprobs = logprobs.sum(dim=-1)
-        entropy = entropy.sum(dim=-1)
-        return logprobs, entropy, action
+            for prob in multi_probs:
+                categorial_prob = Categorical(prob)
+                action = categorial_prob.sample()
+                actions.append(action)
+            # 例如一共2类动作，3个智能体，每次采样时是[3]，代表每个智能体做的动作
+            # stack就需要在最后一维堆叠，变成[3,2]，第一维是智能体，第二维是每类动作
+            action = torch.stack(actions, dim=-1)
+        # 计算累加的对数概率
+
+        for i, prob in enumerate(multi_probs):
+            categorial_prob = Categorical(prob)
+            # 根据动作，从每一行概率分布中找到对应的对数概率
+            if len(action.shape) == 1:
+                logprobs = categorial_prob.log_prob(action)
+            else:
+                logprobs = categorial_prob.log_prob(action[:, i])
+            sum_logprobs += logprobs
+            # 后面算的时候直接取mean就行
+            sum_entropy += categorial_prob.entropy()
+        return sum_logprobs, sum_entropy, action
 
 
 class MultiHeadActorCritic(nn.Module):
