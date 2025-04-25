@@ -129,7 +129,24 @@ class RunningMeanStd(object):
     """
     用于标准化输入状态，会计算每列的均值方差
     要用的时候从rms.mean和rms.var中取
-    更新使用update方法
+    输入:batch=np.array([
+    [1,2,3,4,5],
+    [2,3,4,5,6],
+    [3,4,5,6,7],
+    [4,5,6,7,8],
+    [5,6,7,8,9]
+    ])
+    输出：
+    mean=[2.99 3.99 4.99 5.99 6.99]
+    var=[2.00 2.00 2.00 2.00 2.00]
+
+    使用：
+    ```python
+    rms=RunningMeanStd(shape=(5,))
+    rms.update(batch)
+    new_batch=(batch-rms.mean)/np.sqrt(rms.var)
+    rms.update(new_batch)
+    ```
     """
 
     def __init__(self, epsilon=1e-4, shape=()):
