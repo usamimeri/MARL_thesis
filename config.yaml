@@ -15,11 +15,29 @@ constants:
   investment_rate: 0.03 # 资产用于投资的比率
   swf_eq_param: 0.5 # 社会福利函数公平效率系数
 
-  # 一些训练相关的参数
+
+# 一些训练相关的参数
+train:
   gamma: 0.99 # 折扣因子
   lambda: 0.98 # GAE参数
+  num_steps: 128 # 一轮rollout的步数
+  n_minibatches: 4 # 训练时分的batch数
+  worker_lr: 0.001 # 劳动者学习率
+  firm_lr: 0.001 # 企业学习率
+  government_lr: 0.0005
+  entropy_coef_start: 0.5 # 熵正则化系数起始
+  entropy_coef_end: 0.01 # 熵正则化系数退火结果
+  ent_coef: 0.05 #若是固定系数，则设置为0.05
+  ppo_update: 4 # 更新次数
+  clip_param: 0.2 # PPO裁剪参数
+  vf_coef: 0.5 # 价值函数系数
+  max_grad_norm: 0.5 # 梯度裁剪
+  total_timesteps: 10000 # 总训练步数
+  seed: 20021117
 
-  
+
+
+
 size:
   action:
     worker: [10,10,10,4] # MultiDiscrete，消费量、报价、劳动量、工作企业(这里假定是4家，因为yaml不能引用变量)

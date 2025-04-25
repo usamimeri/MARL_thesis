@@ -3,6 +3,7 @@ import yaml
 import numpy as np
 from scipy.stats import norm
 import torch
+import random
 
 
 def load_config(config_path='config.yaml') -> dict:
@@ -177,3 +178,12 @@ def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, 
     new_count = tot_count
 
     return new_mean, new_var, new_count
+
+
+def seed_everything(seed: int):
+    """设置随机种子"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True

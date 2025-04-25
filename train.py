@@ -1,7 +1,7 @@
 from buffer import RolloutBuffer
 from env import EconomicEnv
 from network import MultiHeadActorCritic
-from utils import load_config
+from utils import load_config, seed_everything
 import torch
 # 尝试rollout
 config = load_config()
@@ -23,6 +23,9 @@ government_buffer = RolloutBuffer(buffer_size=num_steps, obs_dim=government_obs_
 worker_net = MultiHeadActorCritic(worker_obs_dim, worker_action_dim).to(device)
 firm_net = MultiHeadActorCritic(firm_obs_dim, firm_action_dim).to(device)
 government_net = MultiHeadActorCritic(government_obs_dim, government_action_dim).to(device)
+
+seed_everything(config["train"]["seed"])
+num_updates = config["train"]["total_timesteps"] // num_steps
 
 for epoch in range(1):
     env.reset()
@@ -52,16 +55,10 @@ for epoch in range(1):
         firm_buffer.add(firm_obs, firm_action.cpu().numpy(), firm_reward, firm_value, firm_logprobs)
         government_buffer.add(government_obs, government_action.cpu().numpy(), government_reward,
                               government_value, government_logprobs)
-
-
-for data in worker_buffer.get(batch_size=2):
-    print(data)
-    break
-
-for data in firm_buffer.get(batch_size=2):
-    print(data)
-    break
-
-for data in government_buffer.get(batch_size=2):
-    print(data)
-    break
+    with torch.no_grad():
+        worker_values = worker_net.get_value(torch.from_numpy(worker_obs).to(device))
+        firm_values = firm_net.get_value(torch.from_numpy(firm_obs).to(device))
+        government_values = government_net.get_value(torch.from_numpy(government_obs).to(device))
+    worker_buffer.compute_returns_and_advantage(last_values=worker_values)
+    firm_buffer.compute_returns_and_advantage(last_values=firm_values)
+    government_buffer.compute_returns_and_advantage(last_values=government_values)

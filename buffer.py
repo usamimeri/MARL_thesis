@@ -10,12 +10,12 @@ import torch as th
 
 
 class RolloutData(NamedTuple):
-    observations: np.ndarray
-    actions: np.ndarray
-    old_values: np.ndarray
-    old_log_prob: np.ndarray
-    advantages: np.ndarray
-    returns: np.ndarray
+    observations: th.Tensor
+    actions: th.Tensor
+    old_values: th.Tensor
+    old_log_prob: th.Tensor
+    advantages: th.Tensor
+    returns: th.Tensor
 
 
 class BaseBuffer(ABC):
@@ -34,10 +34,10 @@ class BaseBuffer(ABC):
         self.buffer_size = buffer_size
         self.obs_dim = obs_dim
         self.action_dim = action_dim
-
+        self.config = load_config()
         self.pos = 0
         self.full = False
-        self.device = "cuda" if th.cuda.is_available() else "cpu"
+        self.device = self.config["device"]
         self.num_agents = num_agents
 
     @staticmethod
@@ -154,8 +154,8 @@ class RolloutBuffer(BaseBuffer):
     ):
         super().__init__(buffer_size, obs_dim, action_dim, num_agents=num_agents)
         self.config = load_config()
-        self.gae_lambda = self.config["constants"]["lambda"]
-        self.gamma = self.config["constants"]["gamma"]
+        self.gae_lambda = self.config["train"]["lambda"]
+        self.gamma = self.config["train"]["gamma"]
         self.generator_ready = False
         self.reset()
 
