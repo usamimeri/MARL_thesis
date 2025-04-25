@@ -3,8 +3,9 @@ from utils import (load_config,
                    distribute_evenly,
                    distribute_elements,
                    inverse_weight_normalized,
-                   gini)
-import torch
+                   gini,
+                   sigmoid)
+import numpy as np
 
 
 class EconomicEnv:
@@ -19,60 +20,60 @@ class EconomicEnv:
         self.switch_job_penalty = self.config['constants']['switch_job_penalty']
         self.swf_eq_param = self.config['constants']['swf_eq_param']
         # 所有可能的报价
-        self.quote_range = torch.tensor(self.config['constants']['quote_range'], device=self.device)
-        self.labor_range = torch.tensor(self.config['constants']['labor_range'], device=self.device)
-        self.wage_range = torch.tensor(self.config['constants']['wage_range'], device=self.device)
-        self.consumption_range = torch.tensor(self.config['constants']['consumption_range'], device=self.device)
-        self.tax_rate_range = torch.tensor(self.config['constants']['tax_rate_range'], device=self.device)
+        self.quote_range = np.array(self.config['constants']['quote_range'])
+        self.labor_range = np.array(self.config['constants']['labor_range'])
+        self.wage_range = np.array(self.config['constants']['wage_range'])
+        self.consumption_range = np.array(self.config['constants']['consumption_range'])
+        self.tax_rate_range = np.array(self.config['constants']['tax_rate_range'])
 
     def reset(self):
         # ========================== 劳动者相关 ==========================
         # 劳动者资产
-        self.worker_asset = torch.full((self.num_worker_agents, ),
-                                       self.config['initialize']['worker_asset'], device=self.device)
+        self.worker_asset = np.full((self.num_worker_agents, ),
+                                    self.config['initialize']['worker_asset'], dtype=np.float32)
         # 劳动者技能禀赋
-        self.worker_levels = torch.tensor(generate_levels(self.num_worker_agents), device=self.device)
+        self.worker_levels = generate_levels(self.num_worker_agents)
         # 劳动者劳动厌恶系数
-        self.worker_labor_aversion = torch.tensor(distribute_elements(
-            self.config['constants']['labor_aversion_range'], self.num_worker_agents), device=self.device)
+        self.worker_labor_aversion = distribute_elements(
+            self.config['constants']['labor_aversion_range'], self.num_worker_agents)
         # 劳动者报价
-        self.worker_quote = torch.full((self.num_worker_agents,),
-                                       self.config['initialize']['quote'], device=self.device)
+        self.worker_quote = np.full((self.num_worker_agents,),
+                                    self.config['initialize']['quote'], dtype=np.float32)
         # 初始化每个劳动者所属的企业
-        self.worker_in_firm = torch.tensor(distribute_evenly(
-            self.num_worker_agents, self.num_firm_agents), dtype=torch.long, device=self.device)
+        self.worker_in_firm = np.array(distribute_evenly(
+            self.num_worker_agents, self.num_firm_agents), dtype=np.int32)
         # 劳动者独热编码
-        self.worker_one_hot = torch.eye(self.num_worker_agents, device=self.device)
+        self.worker_one_hot = np.eye(self.num_worker_agents, dtype=np.float32)
         # 劳动者劳动量
-        self.worker_labor = torch.zeros((self.num_worker_agents,), device=self.device)
+        self.worker_labor = np.zeros((self.num_worker_agents,), dtype=np.float32)
         # 劳动者消费量
-        self.worker_consumption = torch.zeros((self.num_worker_agents,), device=self.device)
+        self.worker_consumption = np.zeros((self.num_worker_agents,), dtype=np.float32)
         # 劳动者在上家企业累计工作时长
         # 如果跳槽则清空，若不跳槽继续累计
-        self.worker_firm_len = torch.zeros((self.num_worker_agents,), device=self.device)
+        self.worker_firm_len = np.zeros((self.num_worker_agents,), dtype=np.float32)
         # ========================== 企业相关 ==========================
         # 企业资产
-        self.firm_asset = torch.full((self.num_firm_agents,),
-                                     self.config['initialize']['firm_asset'], device=self.device)
+        self.firm_asset = np.full((self.num_firm_agents,),
+                                  self.config['initialize']['firm_asset'], dtype=np.float32)
         # 企业资本
-        self.firm_capital = torch.full((self.num_firm_agents,),
-                                       self.config['initialize']['firm_capital'], device=self.device)
+        self.firm_capital = np.full((self.num_firm_agents,),
+                                    self.config['initialize']['firm_capital'], dtype=np.float32)
         # 企业资本弹性
-        self.firm_capital_elasticity = torch.tensor(distribute_elements(
-            self.config['constants']['captial_elasticity'], self.num_firm_agents), device=self.device)
+        self.firm_capital_elasticity = distribute_elements(
+            self.config['constants']['captial_elasticity'], self.num_firm_agents)
         # 各企业报价
-        self.firm_quote = torch.full((self.num_firm_agents,),
-                                     self.config['initialize']['quote'], device=self.device)
+        self.firm_quote = np.full((self.num_firm_agents,),
+                                  self.config['initialize']['quote'])
         # 各企业工资水平
-        self.firm_wage = torch.full((self.num_firm_agents,),
-                                    self.config['initialize']['wage'], device=self.device)
+        self.firm_wage = np.full((self.num_firm_agents,),
+                                 self.config['initialize']['wage'])
         # 各企业销售额
-        self.firm_sales = torch.zeros((self.num_firm_agents,), device=self.device)
+        self.firm_sales = np.zeros((self.num_firm_agents,), dtype=np.float32)
         # 企业税前利润
-        self.firm_pre_tax_profit = torch.zeros((self.num_firm_agents,), device=self.device)
+        self.firm_pre_tax_profit = np.zeros((self.num_firm_agents,), dtype=np.float32)
         # 各企业所拥有的劳动量
-        self.firm_labor = torch.zeros((self.num_firm_agents,), device=self.device)
-        self.firm_production = torch.zeros((self.num_firm_agents,), device=self.device)
+        self.firm_labor = np.zeros((self.num_firm_agents,), dtype=np.float32)
+        self.firm_production = np.zeros((self.num_firm_agents,), dtype=np.float32)
         # ========================== 政府相关 ==========================
         # 政府税率
         self.tax_rate = self.config['initialize']['tax_rate']
@@ -88,11 +89,11 @@ class EconomicEnv:
         输出为和企业数量维度一致的向量，代表在每家企业的总劳动量
         [200,500,400]
         """
-        return torch.bincount(self.worker_in_firm, weights=self.worker_labor, minlength=self.num_firm_agents)
+        return np.bincount(self.worker_in_firm, weights=self.worker_labor, minlength=self.num_firm_agents)
 
     def judge_switch_firm(self, next_worker_in_firm):
         """判断劳动者是否跳槽，若跳槽则对应向量位置为1"""
-        return (self.worker_in_firm != next_worker_in_firm).long().to(self.device)
+        return (self.worker_in_firm != next_worker_in_firm).astype(int)
 
     def construct_worker_obs(self):
         """构造劳动者的部分观测
@@ -110,16 +111,16 @@ class EconomicEnv:
         输出维度为(num_worker_agents,worker_obs_dim)
         其中worker_obs_dim=config["size"]["observation"]["worker"]
         """
-        worker_obs = torch.cat([
-            self.worker_asset.unsqueeze(1),
-            self.worker_in_firm.unsqueeze(1),
-            self.scalar_repeat(self.tax_rate, self.num_worker_agents).unsqueeze(1),
-            self.firm_wage.repeat(self.num_worker_agents, 1),
+        worker_obs = np.concatenate([
+            self.worker_asset[:, np.newaxis],
+            self.worker_in_firm[:, np.newaxis],
+            np.full((self.num_worker_agents, 1), self.tax_rate),
+            self.firm_wage[np.newaxis, :].repeat(self.num_worker_agents, axis=0),
             self.worker_one_hot,
-            self.worker_consumption.unsqueeze(1),
-            self.worker_labor.unsqueeze(1),
-            self.worker_quote.unsqueeze(1),
-        ], dim=-1).to(self.device)
+            self.worker_consumption[:, np.newaxis],
+            self.worker_labor[:, np.newaxis],
+            self.worker_quote[:, np.newaxis],
+        ], axis=-1)
         return worker_obs
 
     def construct_firm_obs(self):
@@ -131,13 +132,14 @@ class EconomicEnv:
         - 上期各企业工资水平
         - 上期各企业报价
         """
-        firm_obs = torch.cat([
-            self.firm_asset.unsqueeze(1),
-            self.firm_pre_tax_profit.unsqueeze(1),
-            self.scalar_repeat(self.tax_rate, self.num_firm_agents).unsqueeze(1),
-            self.firm_wage.repeat(self.num_firm_agents, 1),
-            self.firm_quote.repeat(self.num_firm_agents, 1),
-        ], dim=-1).to(self.device)
+        firm_obs = np.concatenate([
+            self.firm_asset[:, np.newaxis],
+            self.firm_pre_tax_profit[:, np.newaxis],
+            self.scalar_repeat(self.tax_rate, self.num_firm_agents)[:, np.newaxis],
+            # (num_firm)->(1,num_firm)->(num_firm,num_firm)
+            self.firm_wage[np.newaxis, :].repeat(self.num_firm_agents, axis=0),
+            self.firm_quote[np.newaxis, :].repeat(self.num_firm_agents, axis=0),
+        ], axis=-1)
         return firm_obs
 
     def construct_government_obs(self):
@@ -149,16 +151,16 @@ class EconomicEnv:
         - 上一期税率
         由于只有一个政府，输出一般是(1,government_obs_dim)
         """
-        government_obs = torch.cat([
+        government_obs = np.concatenate([
             self.worker_asset,
             self.firm_asset,
             self.firm_wage,
-            torch.tensor([self.total_transfer], dtype=torch.float32, device=self.device),
-            torch.tensor([self.tax_rate], dtype=torch.float32, device=self.device)
-        ]).unsqueeze(0).to(self.device)
+            np.array([self.total_transfer]),
+            np.array([self.tax_rate])
+        ])[np.newaxis, :]
         return government_obs
 
-    def worker_settlement(self, worker_action: torch.Tensor):
+    def worker_settlement(self, worker_action: np.ndarray):
         """劳动者执行后结算：
         - 各个公司的劳动总量
         - 存储劳动者的报价报量，等待市场结算
@@ -167,7 +169,6 @@ class EconomicEnv:
 
 
         """
-
         self.worker_consumption = self.consumption_range[worker_action[:, 0]]
         self.worker_labor = self.labor_range[worker_action[:, 1]]
         self.worker_quote = self.quote_range[worker_action[:, 2]]
@@ -179,7 +180,7 @@ class EconomicEnv:
         # 各个公司的劳动总量
         self.firm_labor = self.compute_firm_labor()
 
-    def firm_settlement(self, firm_action: torch.Tensor):
+    def firm_settlement(self, firm_action: np.ndarray):
         """企业执行动作后结算
         - 计算企业生产量（根据该企业的劳动量，资本量，资本弹性）
         - 市场清算：根据劳动者的报价报量和企业报价和生产量进行匹配：
@@ -190,17 +191,17 @@ class EconomicEnv:
         self.firm_quote = self.quote_range[firm_action[:, 0]]
         self.firm_wage = self.wage_range[firm_action[:, 1]]
         # 计算企业生产量，根据生产函数
-        self.firm_production = ((self.firm_capital**self.firm_capital_elasticity) *
-                                (self.firm_labor**(1-self.firm_capital_elasticity))).floor()
+        self.firm_production = np.floor((self.firm_capital**self.firm_capital_elasticity) *
+                                        (self.firm_labor**(1-self.firm_capital_elasticity)))
         # 市场清算
         self.market_clearing()
         # 工资结算，对应每个劳动者获得的工资
         self.pre_tax_wages = self.worker_labor*self.worker_levels*self.firm_wage[self.worker_in_firm]
         # 计算企业支付出的工资 TODO：这里其实和compute labor实现一样的
-        self.firm_wage_cost = torch.bincount(
-            self.worker_in_firm, weights=self.pre_tax_wages, minlength=self.num_firm_agents).to(self.device)
+        self.firm_wage_cost = np.bincount(
+            self.worker_in_firm, weights=self.pre_tax_wages, minlength=self.num_firm_agents)
 
-    def government_settlement(self, government_action: torch.Tensor):
+    def government_settlement(self, government_action: np.ndarray):
         """政府执行动作后结算
         - 计算企业效用，即奖励（就是税前利润）
         - 更新企业资产（计算税前利润）
@@ -227,22 +228,23 @@ class EconomicEnv:
         weights = inverse_weight_normalized(self.worker_asset)
         transfer_to_worker = self.total_transfer*weights
         # 更新劳动者资产
-        self.worker_asset = (1+self.interest_rate)*(self.worker_asset+self.pre_tax_wages +
-                                                    transfer_to_worker-worker_tax-self.worker_cost)
+        new_asset = (1+self.interest_rate)*(self.worker_asset+self.pre_tax_wages +
+                                            transfer_to_worker-worker_tax-self.worker_cost)
+        # 不允许负债 TODO:有点粗糙，正常来说要避免负债的，后面优化的时候再改
+        self.worker_asset = np.clip(new_asset, 0.0, np.inf)
 
         # 计算劳动者效用（相对风险厌恶为0.1固定，1-0.1=0.9），也是奖励
         self.worker_utility = (self.worker_consumption**0.9)/0.9-self.worker_labor_aversion * \
             self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len
 
-
         self.worker_firm_len = (self.worker_firm_len+self.worker_labor)*(1-self.worker_switch_firm)
-        self.social_efficiency = torch.sigmoid(self.worker_utility.sum())
+        self.social_efficiency = sigmoid(self.worker_utility.sum())
         self.equality = 1-(self.num_worker_agents)/(self.num_worker_agents-1)*gini(self.pre_tax_wages)
         self.government_reward = ((self.equality)**self.swf_eq_param)*(self.social_efficiency**(1-self.swf_eq_param))
 
-    def scalar_repeat(self, scalar, n: int):
-        "将标量扩展为形状为 (n, ) 的张量。"
-        return torch.full((n, ), scalar, device=self.device)
+    def scalar_repeat(self, scalar, n: int) -> np.ndarray:
+        "将标量扩展为形状为 (n, ) 的向量。"
+        return np.full((n, ), scalar)
 
     def market_clearing(self):
         """市场清算
@@ -318,8 +320,8 @@ class EconomicEnv:
             else:  # 已经没有可以成交的订单了
                 break
         # 计算企业销售额
-        self.firm_sales = torch.tensor(firm_sales, dtype=torch.float32, device=self.device)
+        self.firm_sales = np.array(firm_sales)
         # 劳动者消费量
-        self.worker_consumption = torch.tensor(worker_consumption, dtype=torch.float32, device=self.device)
+        self.worker_consumption = np.array(worker_consumption)
         # 劳动者总开销
-        self.worker_cost = torch.tensor(worker_cost, dtype=torch.float32, device=self.device)
+        self.worker_cost = np.array(worker_cost)

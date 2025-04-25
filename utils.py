@@ -11,7 +11,7 @@ def load_config(config_path='config.yaml') -> dict:
     return config
 
 
-def generate_levels(num_worker_agents) -> list:
+def generate_levels(num_worker_agents) -> np.ndarray:
     """利用标准正态分布初始化技能禀赋"""
     min_value = 0.5           # 技能禀赋最小值
     max_value = 2.0           # 技能禀赋最大值
@@ -22,10 +22,10 @@ def generate_levels(num_worker_agents) -> list:
     levels = norm.ppf(percentiles)
     # 随机打乱
     np.random.shuffle(levels)
-    return levels
+    return np.array(levels)
 
 
-def distribute_evenly(total: int, max_label: int) -> List[int]:
+def distribute_evenly(total: int, max_label: int) -> np.ndarray:
     """
     将 total 个元素均匀分配到标签 0,1,...,max_label-1 共 max_label 个桶中。
     每个标签至少出现一次，且各标签出现次数尽可能均匀。
@@ -45,23 +45,27 @@ def distribute_evenly(total: int, max_label: int) -> List[int]:
 
     np.random.shuffle(result)
 
-    return result
+    return np.array(result)
 
 
-def inverse_weight_normalized(input_tensor: torch.Tensor) -> torch.Tensor:
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
+def inverse_weight_normalized(x: np.ndarray) -> np.ndarray:
     """
-    根据输入的一维张量，计算与其值大小成反比的权重，并进行归一化处理。
+    根据输入的一维向量，计算与其值大小成反比的权重，并进行归一化处理。
 
     参数:
-    - input_tensor (torch.Tensor): 输入的一维张量
+    - x: 输入的一维向量
 
     返回:
-    - torch.Tensor: 归一化后的权重向量
+    - np.ndarray: 归一化后的权重向量
     """
     # 防止除以零，给定一个非常小的值
     epsilon = 1e-6
     # 计算反比权重
-    weights = 1.0 / (input_tensor + epsilon)
+    weights = 1.0 / (x + epsilon)
 
     # 对权重进行归一化，使得权重的和为1
     normalized_weights = weights / weights.sum()
@@ -71,7 +75,7 @@ def inverse_weight_normalized(input_tensor: torch.Tensor) -> torch.Tensor:
 
 def distribute_elements(lst, n):
     """
-    将输入列表的元素尽可能均匀地分配到一个长度为 n 的列表中。
+    将输入列表的元素尽可能均匀地分配到一个长度为 n 的numpy数组中。
 
     参数:
         lst (list): 输入的列表，其中包含需要分配的元素。
@@ -110,48 +114,49 @@ def distribute_elements(lst, n):
 
     np.random.shuffle(result)
 
-    return result
+    return np.array(result)
 
 
-def gini(x: torch.Tensor) -> float:
-    x_sorted, _ = torch.sort(x)
+def gini(x: np.ndarray) -> float:
+    x_sorted = np.sort(x)
     n = len(x)
-    index = torch.arange(1, n + 1, dtype=torch.float32, device=x.device)
-    gini = (torch.sum((2 * index - n - 1) * x_sorted)) / (n * torch.sum(x_sorted))
+    index = np.arange(1, n + 1, dtype=np.float32)
+    gini = (np.sum((2 * index - n - 1) * x_sorted)) / (n * np.sum(x_sorted))
     return gini
 
 
-class RunningMeanStd(torch.nn.Module):
-    def __init__(self, shape: tuple):
-        super(RunningMeanStd, self).__init__()
-        self.mean = torch.zeros(shape, dtype=torch.float64)  # 每列的均值
-        self.var = torch.ones(shape, dtype=torch.float64)    # 每列的方差，初始化为1
-        self.count = 1e-4                                 # 初始化计数，防止第一次除零
+class RunningMeanStd(object):
+    """
+    用于标准化输入状态，会计算每列的均值方差
+    要用的时候从rms.mean和rms.var中取
+    更新使用update方法
+    """
+
+    def __init__(self, epsilon=1e-4, shape=()):
+        self.mean = np.zeros(shape, 'float64')
+        self.var = np.ones(shape, 'float64')
+        self.count = epsilon
 
     def update(self, x):
-        batch_mean = x.mean(dim=0)  # 计算输入x在第一个维度（batch维度）上的均值
-        batch_var = x.var(dim=0, unbiased=False)  # 计算输入x在第一个维度上的方差，unbiased=False时为样本方差
-        batch_count = x.size(0)  # 获取x中的数据点数量（即batch大小）
-        self.update_from_moments(batch_mean, batch_var, batch_count)  # 更新均值和方差
+        batch_mean = np.mean(x, axis=0)
+        batch_var = np.var(x, axis=0)
+        batch_count = x.shape[0]
+        self.update_from_moments(batch_mean, batch_var, batch_count)
 
     def update_from_moments(self, batch_mean, batch_var, batch_count):
-        # 使用增量更新公式更新mean, var, count
         self.mean, self.var, self.count = update_mean_var_count_from_moments(
             self.mean, self.var, self.count, batch_mean, batch_var, batch_count)
 
 
 def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, batch_count):
-    delta = batch_mean - mean  # 新旧均值的差
-    tot_count = count + batch_count  # 总数据点数
+    delta = batch_mean - mean
+    tot_count = count + batch_count
 
-    # 更新均值
     new_mean = mean + delta * batch_count / tot_count
-
-    # 更新方差
     m_a = var * count
     m_b = batch_var * batch_count
-    M2 = m_a + m_b + (delta ** 2) * count * batch_count / tot_count  # 计算M2
-    new_var = M2 / tot_count  # 归一化方差
-    new_count = tot_count  # 更新总数据点数
+    M2 = m_a + m_b + np.square(delta) * count * batch_count / tot_count
+    new_var = M2 / tot_count
+    new_count = tot_count
 
     return new_mean, new_var, new_count

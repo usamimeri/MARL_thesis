@@ -26,9 +26,9 @@ size:
     firm: [10,10] # 单位劳动工资、报价
     government: 8 # 税率
   observation:
-    worker: 20 # 1+1+1+1+4+10+1+1
-    firm: 11 # 1+1+1+4+4
-    government: 20 # 10+4+4+1+1
+    worker: 21 # 多一个公司增加1
+    firm: 13 # 多一个公司增加2
+    government: 22 # 多一个公司增加2
 
 initialize:
   quote: 10.0 # 初始报价
@@ -40,5 +40,6 @@ initialize:
 
 device: cuda
 num_worker_agents: 10
-num_firm_agents: 4
-
+num_firm_agents: 5
+experiment:
+  buffer_size: 10000

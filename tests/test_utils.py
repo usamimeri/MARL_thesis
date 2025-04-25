@@ -10,7 +10,7 @@ def test_distribute_evenly():
 
     # 每个标签至少出现一次
     for label in range(max_label):
-        assert result.count(label) > 0, f"标签 {label} 没有出现"
+        assert label in result, f"标签 {label} 没有出现"
 
     # 测试2：标签数量为 5，总数为 15
     total = 15
@@ -18,7 +18,7 @@ def test_distribute_evenly():
     result = distribute_evenly(total, max_label)
 
     for label in range(max_label):
-        assert result.count(label) > 0, f"标签 {label} 没有出现"
+        assert label in result, f"标签 {label} 没有出现"
 
     # 测试4：标签数量为 2，总数为 5
     total = 5
@@ -27,4 +27,4 @@ def test_distribute_evenly():
 
     # 每个标签至少出现一次
     for label in range(max_label):
-        assert result.count(label) > 0, f"标签 {label} 没有出现"
+        assert label in result, f"标签 {label} 没有出现"
