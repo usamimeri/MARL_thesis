@@ -8,7 +8,7 @@ import numpy as np
 import wandb
 import os
 from datetime import datetime
-init_wandb()
+init_wandb("均衡目标")
 np.set_printoptions(suppress=True)
 
 config = load_config()
@@ -38,7 +38,7 @@ ppo_government = PPO(config["train"]["government_lr"], government_buffer, govern
 seed_everything(config["train"]["seed"])
 num_updates = config["train"]["total_timesteps"] // num_steps
 
-
+print("num_updates: ", num_updates)
 for epoch in range(num_updates):
     print(f"epoch: {epoch}")
     env.reset()

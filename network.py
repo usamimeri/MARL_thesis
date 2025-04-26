@@ -18,11 +18,11 @@ class Critic(nn.Module):
     def __init__(self, state_dim: int):
         super().__init__()
         self.net = nn.Sequential(
-            layer_init(nn.Linear(state_dim, 128)),
+            layer_init(nn.Linear(state_dim, 64)),
             nn.Tanh(),
-            layer_init(nn.Linear(128, 128)),
+            layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
-            layer_init(nn.Linear(128, 1), std=1.0),
+            layer_init(nn.Linear(64, 1), std=1.0),
         )
 
     def get_value(self, state):
@@ -38,12 +38,12 @@ class MultiHeadActor(nn.Module):
         self.state_dim = state_dim
         self.action_dim = action_dim if isinstance(action_dim, list) else [action_dim]
         self.backbone = nn.Sequential(
-            layer_init(nn.Linear(state_dim, 128)),
+            layer_init(nn.Linear(state_dim, 64)),
             nn.Tanh(),
-            layer_init(nn.Linear(128, 128)),
+            layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
         )
-        self.heads = nn.ModuleList([layer_init(nn.Linear(128, a_dim), std=0.01) for a_dim in self.action_dim])
+        self.heads = nn.ModuleList([layer_init(nn.Linear(64, a_dim), std=0.01) for a_dim in self.action_dim])
 
     def get_logprob_and_action(self, state, action=None):
         """

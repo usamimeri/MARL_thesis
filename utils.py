@@ -192,11 +192,13 @@ def seed_everything(seed: int):
     torch.backends.cudnn.deterministic = True
 
 
-def init_wandb():
+def init_wandb(name=None):
     config = load_config()
+    if name is None:
+        name = f"Economic-PPO-{datetime.now().strftime('%m-%d_%H-%M')}"
     wandb.init(
         project="Thesis",
-        name=f"Economic-PPO-{datetime.now().strftime('%m-%d_%H-%M')}",
+        name=name,
         config=config,
     )
 

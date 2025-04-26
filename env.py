@@ -165,8 +165,6 @@ class EconomicEnv:
             self.worker_asset_change[:, np.newaxis],
             self.worker_total_consumption[:, np.newaxis],
             self.worker_labor[:, np.newaxis],
-            # one-hot编码
-            np.eye(self.num_worker_agents, self.num_worker_agents, dtype=np.float32)
         ], axis=-1).astype(np.float32)
 
         # normalization
@@ -200,7 +198,7 @@ class EconomicEnv:
             self.firm_production[:, np.newaxis],
             self.firm_total_demand[:, np.newaxis],
             self.firm_inventory[:, np.newaxis],
-            np.eye(self.num_firm_agents, self.num_firm_agents, dtype=np.float32)
+
         ], axis=-1).astype(np.float32)
 
         # # normalization

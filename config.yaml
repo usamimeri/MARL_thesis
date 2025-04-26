@@ -10,7 +10,7 @@ constants:
   wage_range: [3,6,9,12,15,18,21,24,27,30] # 劳动者工资
   captial_elasticity: [0.35,0.55,0.75] # 资本弹性
   interest_rate: 0.003 # 利率
-  swf_eq_param: 0.2 # 社会福利函数公平效率系数
+  swf_eq_param: 0.5 # 社会福利函数公平效率系数
   storage_dpr: 0.25 # 存储折旧率 一部分磨损 一部分是过时卖不出去
   firm_tax_rate: 0.25 # 企业固定税率
   efficiency_scale: 1000.0 # 效率缩放，避免尺度问题
@@ -21,11 +21,11 @@ constants:
 train:
   gamma: 0.99 # 折扣因子
   lambda: 0.98 # GAE参数
-  num_steps: 64 # 一轮rollout的步数
+  num_steps: 84 # 一轮rollout的步数
   n_minibatches: 4 # 训练时分的batch数
-  worker_lr: 0.00001 # 劳动者学习率
-  firm_lr: 0.00001 # 企业学习率
-  government_lr: 0.00001
+  worker_lr: 0.000025 # 劳动者学习率
+  firm_lr: 0.000025 # 企业学习率
+  government_lr: 0.000025
   entropy_coef_start: 0.5 # 熵正则化系数起始
   entropy_coef_end: 0.1 # 熵正则化系数退火结果
   ent_coef: 0.01 #若是固定系数，则设置为0.01
@@ -33,7 +33,7 @@ train:
   clip_param: 0.2 # PPO裁剪参数
   vf_coef: 0.5 # 价值函数系数
   max_grad_norm: 0.5 # 梯度裁剪
-  total_timesteps: 10000 # 总训练步数
+  total_timesteps: 25000 # 总训练步数
   seed: 20021117
   annealing_lr: True # 是否退火
 
@@ -46,8 +46,8 @@ size:
     firm: [10,10] # 单位劳动工资、报价
     government: 10 # 税率
   observation:
-    worker: 44 
-    firm: 28
+    worker: 24 
+    firm: 23
     government: 52
 
 initialize:
