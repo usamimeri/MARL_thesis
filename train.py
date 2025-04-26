@@ -118,7 +118,6 @@ for epoch in range(num_updates):
         wandb.log({f"firm/firm_{i+1}_return": ppo_firm.buffer.returns[-1][i]})
     wandb.log({"government/return": ppo_government.buffer.returns[-1][0]})
 
-
     # =====================================训练阶段=====================================
     worker_entropy_loss_mean, worker_pg_loss_mean, worker_vf_loss_mean, worker_approx_kl_mean, worker_loss_mean = ppo_worker.update()
     firm_entropy_loss_mean, firm_pg_loss_mean, firm_vf_loss_mean, firm_approx_kl_mean, firm_loss_mean = ppo_firm.update()
@@ -138,7 +137,8 @@ for epoch in range(num_updates):
     for i in range(env.num_worker_agents):
         wandb.log({f"worker/worker_{i+1}_asset": env.worker_asset[i],
                    f"worker/worker_{i+1}_labor": env.worker_labor[i],
-                   f"worker/worker_{i+1}_quote": env.worker_quote[i]})
+                   f"worker/worker_{i+1}_quote": env.worker_quote[i],
+                   f"worker/worker_{i+1}_in_firm": env.worker_in_firm[i]})
 
     wandb.log({"government/tax_rate": env.tax_rate})
     # =====================================训练结束=====================================

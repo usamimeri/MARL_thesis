@@ -41,7 +41,6 @@ class PPO:
         frac = 1.0-(self.update_step-1.0)/self.num_updates
         return coef*frac
 
-
     def update(self):
         entropy_loss_ls = []
         pg_loss_ls = []
@@ -50,6 +49,7 @@ class PPO:
         loss_ls = []
         if self.annealing_lr:
             self.optimizer.param_groups[0]['lr'] = self.annealing_coef(self.optimizer.param_groups[0]['lr'])
+        self.ent_coef = self.annealing_coef(self.ent_coef)
 
         # 完成一轮epoch的训练迭代，在一次ppo_update中，遍历每个minibatch
         for update_epoch in range(self.ppo_update):

@@ -51,9 +51,6 @@ def distribute_evenly(total: int, max_label: int) -> np.ndarray:
     return np.array(result)
 
 
-def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
-
 
 def inverse_weight_normalized(x: np.ndarray) -> np.ndarray:
     """

@@ -4,7 +4,7 @@ from utils import (load_config,
                    distribute_elements,
                    inverse_weight_normalized,
                    gini,
-                   sigmoid)
+                   )
 import numpy as np
 from utils import RunningMeanStd
 import warnings
@@ -24,6 +24,8 @@ class EconomicEnv:
         self.depreciation_rate = self.config['constants']['depreciation_rate']
         self.switch_job_penalty = self.config['constants']['switch_job_penalty']
         self.swf_eq_param = self.config['constants']['swf_eq_param']
+        self.storage_dpr = self.config['constants']['storage_dpr']
+        self.interest_rate = self.config['constants']['interest_rate']
         # ============================一些范围参数==========================
         self.quote_range = np.array(self.config['constants']['quote_range'])
         self.labor_range = np.array(self.config['constants']['labor_range'])
@@ -52,21 +54,21 @@ class EconomicEnv:
         # 劳动者劳动厌恶系数
         self.worker_labor_aversion = distribute_elements(
             self.config['constants']['labor_aversion_range'], self.num_worker_agents)
-        # 劳动者报价
-        self.worker_quote = np.full((self.num_worker_agents,),
-                                    self.config['initialize']['quote'], dtype=np.float32)
+
         # 初始化每个劳动者所属的企业
         self.worker_in_firm = np.array(distribute_evenly(
             self.num_worker_agents, self.num_firm_agents), dtype=np.int32)
-        # 劳动者独热编码
-        self.worker_one_hot = np.eye(self.num_worker_agents, dtype=np.float32)
         # 劳动者劳动量
         self.worker_labor = np.zeros((self.num_worker_agents,), dtype=np.float32)
-        # 劳动者消费量
-        self.worker_consumption = np.zeros((self.num_worker_agents,), dtype=np.float32)
+        # 劳动者累计消费量(求和各个公司)
+        self.worker_total_consumption = np.zeros((self.num_worker_agents,), dtype=np.float32)
+        # 劳动者在各企业消费量
+        self.worker_consumption = np.zeros((self.num_worker_agents, self.num_firm_agents), dtype=np.float32)
         # 劳动者在上家企业累计工作时长
         # 如果跳槽则清空，若不跳槽继续累计
         self.worker_firm_len = np.zeros((self.num_worker_agents,), dtype=np.float32)
+        # 各劳动者资产变化
+        self.worker_asset_change = np.zeros((self.num_worker_agents,), dtype=np.float32)
         # ========================== 企业相关 ==========================
         # 企业资产
         self.firm_asset = np.full((self.num_firm_agents,),
@@ -89,7 +91,10 @@ class EconomicEnv:
         self.firm_pre_tax_profit = np.zeros((self.num_firm_agents,), dtype=np.float32)
         # 各企业所拥有的劳动量
         self.firm_labor = np.zeros((self.num_firm_agents,), dtype=np.float32)
+        # 各企业生产量
         self.firm_production = np.zeros((self.num_firm_agents,), dtype=np.float32)
+        # 各企业资产变化
+        self.firm_asset_change = np.zeros((self.num_firm_agents,), dtype=np.float32)
         # ========================== 政府相关 ==========================
         # 政府税率
         self.tax_rate = self.config['initialize']['tax_rate']
@@ -114,28 +119,35 @@ class EconomicEnv:
     def construct_worker_obs(self) -> np.ndarray:
         """构造劳动者的部分观测
         一般观测的维度是(num_agents,state_dim)
-        - 本期资产
-        - 目前工作企业
-        - 本期政府税率
-        - 上期边际价格
-        - 上期各企业工资水平
-        - 身份独热编码
-        - 上期消费量
+        - 每个企业的价格
+        - 每个企业的工资
+        - 上期每个企业的产量
+        - 政府税率
+        - 自身资产 
+        - 在目前公司工作时长
+        - 技能系数
+        - 劳动厌恶
+        - 目前工作公司
+        - 上期资产变化
+        - 上期消费量（总和）
         - 上期劳动量
-        - 上期报价
 
         输出维度为(num_worker_agents,worker_obs_dim)
         其中worker_obs_dim=config["size"]["observation"]["worker"]
         """
         worker_obs = np.concatenate([
-            self.worker_asset[:, np.newaxis],
-            self.worker_in_firm[:, np.newaxis],
+            self.vector2obs(self.firm_quote, self.num_worker_agents),
+            self.vector2obs(self.firm_wage, self.num_worker_agents),
+            self.vector2obs(self.firm_production, self.num_worker_agents),
             np.full((self.num_worker_agents, 1), self.tax_rate),
-            self.firm_wage[np.newaxis, :].repeat(self.num_worker_agents, axis=0),
-            self.worker_one_hot,
-            self.worker_consumption[:, np.newaxis],
+            self.worker_asset[:, np.newaxis],
+            self.worker_firm_len[:, np.newaxis],
+            self.worker_levels[:, np.newaxis],
+            self.worker_labor_aversion[:, np.newaxis],
+            self.worker_in_firm[:, np.newaxis],
+            self.worker_asset_change[:, np.newaxis],
+            self.worker_total_consumption[:, np.newaxis],
             self.worker_labor[:, np.newaxis],
-            self.worker_quote[:, np.newaxis],
         ], axis=-1).astype(np.float32)
 
         # normalization
@@ -256,6 +268,7 @@ class EconomicEnv:
         worker_tax = self.pre_tax_wages*self.tax_rate
         firm_tax = self.firm_pre_tax_profit*self.tax_rate
         self.total_transfer = worker_tax.sum()+firm_tax.sum()
+        self.total_transfer = np.clip(self.total_transfer, 0.0, 10000.0)
         # 转移支付
         weights = inverse_weight_normalized(self.worker_asset)
         transfer_to_worker = self.total_transfer*weights
@@ -263,7 +276,7 @@ class EconomicEnv:
         new_asset = self.worker_asset+self.pre_tax_wages + \
             transfer_to_worker-worker_tax-self.worker_cost
         # 不允许负债 TODO:有点粗糙，正常来说要避免负债的，后面优化的时候再改
-        self.worker_asset = np.clip(new_asset, 0.0, np.inf)
+        self.worker_asset = np.clip(new_asset, 0.0, 20000.0)
 
         # 计算劳动者效用（相对风险厌恶为0.1固定，1-0.1=0.9），也是奖励
         self.worker_utility = (self.worker_consumption**0.9)/0.9-self.worker_labor_aversion * \
@@ -290,82 +303,9 @@ class EconomicEnv:
         "将标量扩展为形状为 (n, ) 的向量。"
         return np.full((n, ), scalar)
 
+    def vector2obs(self, vector: np.ndarray, K: int) -> np.ndarray:
+        """根据指定的agent数目K，把一个一维向量(n,)扩展成(K,n)"""
+        return np.tile(vector, (K, 1))
+
     def market_clearing(self):
-        """市场清算
-        - 所有劳动者申报自己的报价和消费量
-        - 所有企业申报自己的报价和生产量
-        从最高买家开始匹配最低卖家，为了避免智能体总是出高价保证买到，这里有一个撮合价格
-        即成交价实买家卖家出价平均。
-        产生一个博弈过程，虽然出高价能让自己优先购买，但也会导致耗费更高。
-        卖家可以出低价保证自己先被高价的买，但撮合后也会导致平均后价格低了。
-
-        输入：
-        - 劳动者的消费量：self.worker_consumption 维度：(num_worker, )
-        - 劳动者的报价：self.worker_quote 维度：(num_worker, )
-        - 企业的生产量:self.firm_production 维度：(num_firm, )
-        - 企业的报价：self.firm_quote 维度：(num_firm, )
-
-        计算：
-        - 真实成交的劳动者消费量，用于后面计算效用
-        - 企业的销售额,元素是p_{j,t}*C_{j,t}，用于计算效用和更新资产
-        - 劳动者的消费额，用于更新资产
-
-        订单类似：
-        {
-            0: {'index': 0, 'quantity': 20.0, 'quote': 100.0},
-            1: {'index': 3, 'quantity': 10.0, 'quote': 100.0},
-            2: {'index': 1, 'quantity': 10.0, 'quote': 90.0},
-            3: {'index': 2, 'quantity': 5.0, 'quote': 80.0},
-        }
-        """
-        worker_orders = {
-            i: {
-                "index": i,
-                "quantity": self.worker_consumption[i].item(),
-                "quote": self.worker_quote[i].item()
-            }
-            for i in range(len(self.worker_consumption))
-        }
-        firm_orders = {
-            i: {
-                "index": i,
-                "quantity": self.firm_production[i].item(),
-                "quote": self.firm_quote[i].item()
-            }
-            for i in range(len(self.firm_production))
-        }
-        worker_orders = {i: v for i, (_, v) in enumerate(
-            sorted(worker_orders.items(), key=lambda item: item[1]['quote'], reverse=True))}
-        firm_orders = {i: v for i, (_, v) in enumerate(
-            sorted(firm_orders.items(), key=lambda item: item[1]['quote']))}
-
-        worker_index = 0
-        firm_index = 0
-        worker_consumption = [0]*len(self.worker_consumption)
-        firm_sales = [0]*len(self.firm_production)
-        worker_cost = [0]*len(self.worker_consumption)
-        while worker_index < len(worker_orders) and firm_index < len(firm_orders):
-            worker = worker_orders[worker_index]
-            firm = firm_orders[firm_index]
-            if worker['quote'] >= firm['quote']:
-                transaction_price = (firm['quote']+worker['quote'])/2
-                transaction_quantity = min(worker['quantity'], firm['quantity'])
-                worker_consumption[worker['index']] += transaction_quantity
-                cost = transaction_price*transaction_quantity
-                firm_sales[firm['index']] += cost
-                worker_cost[worker['index']] += cost
-
-                worker_orders[worker_index]['quantity'] -= transaction_quantity
-                firm_orders[firm_index]["quantity"] -= transaction_quantity
-                if worker_orders[worker_index]['quantity'] < 0.5:
-                    worker_index += 1
-                if firm_orders[firm_index]["quantity"] < 0.5:
-                    firm_index += 1
-            else:  # 已经没有可以成交的订单了
-                break
-        # 计算企业销售额
-        self.firm_sales = np.array(firm_sales)
-        # 劳动者消费量
-        self.worker_consumption = np.array(worker_consumption)
-        # 劳动者总开销
-        self.worker_cost = np.array(worker_cost)
+        pass
