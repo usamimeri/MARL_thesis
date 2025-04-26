@@ -211,11 +211,10 @@ def wandb_log(name: str, entropy_loss_mean, pg_loss_mean, vf_loss_mean, approx_k
     })
 
 
-
 class Logger:
     def __init__(self, log_dir="logs", level="INFO"):
         os.makedirs(log_dir, exist_ok=True)
-
+        self.enabled = True
         current_time = datetime.now().strftime("%Y-%m-%d_%H-%M")
         log_file = os.path.join(log_dir, f"{current_time}.log")
         logger.remove()
@@ -223,5 +222,6 @@ class Logger:
         self.logger = logger
 
     def info(self, message):
-        self.logger.info(message)
+        if self.enabled:
+            self.logger.info(message)
 

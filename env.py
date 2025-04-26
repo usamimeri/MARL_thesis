@@ -5,17 +5,15 @@ from utils import (load_config,
                    inverse_weight_normalized,
                    gini,
                    RunningMeanStd,
-                   get_logger
+                   Logger
                    )
 import numpy as np
-
-
-logger = get_logger()
 
 
 class EconomicEnv:
     def __init__(self):
         self.config = load_config()
+        self.logger = Logger()
         self.device = self.config['device']
         self.worker_obs_dim = self.config["size"]["observation"]["worker"]
         self.firm_obs_dim = self.config["size"]["observation"]["firm"]
@@ -48,6 +46,7 @@ class EconomicEnv:
         # self.rms_government_reward = RunningMeanStd(shape=(1,))
 
     def reset(self):
+        self.episode_start = True
         # ========================== 劳动者相关 ==========================
         # 劳动者资产
         self.worker_asset = np.full((self.num_worker_agents, ),
@@ -234,7 +233,10 @@ class EconomicEnv:
         self.worker_consumption = self.consumption_range[worker_action[:, :-2]]
         self.adjust_consumption()
         self.worker_labor = self.labor_range[worker_action[:, -2]]
-        next_worker_in_firm = worker_action[:, -1]
+        if self.episode_start:
+            next_worker_in_firm = self.worker_in_firm
+        else:
+            next_worker_in_firm = worker_action[:, -1]
         self.worker_switch_firm = self.judge_switch_firm(next_worker_in_firm=next_worker_in_firm)
         # 更新劳动者所属企业
         self.worker_in_firm = next_worker_in_firm
@@ -270,6 +272,8 @@ class EconomicEnv:
         # 更新当前库存
         self.firm_inventory += self.firm_production
         self.adjust_overdemand()
+        # 购买完毕 更新库存
+        self.firm_inventory -= self.firm_total_demand
         # 计算企业销售额
         self.firm_sales = (self.firm_quote*self.worker_consumption).sum(axis=0)
         # 计算工人消费额
@@ -330,12 +334,12 @@ class EconomicEnv:
         self.worker_asset_change = new_asset-self.worker_asset
         self.worker_asset = new_asset
         # ==========================效用计算==========================
-        # 计算劳动者效用（相对风险厌恶为0.1固定，1-0.1=0.9），也是奖励
-        self.worker_utility = (self.worker_consumption**0.9)/0.9-self.worker_labor_aversion * \
+        # 计算劳动者效用（相对风险厌恶为0.33），也是奖励
+        self.worker_utility = (self.worker_consumption**0.67)/0.67-self.worker_labor_aversion * \
             self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len
 
         self.worker_firm_len = (self.worker_firm_len+self.worker_labor)*(1-self.worker_switch_firm)
-        self.social_efficiency = np.clip(self.worker_utility.sum(), a_min=0.01, a_max=np.inf)
+        self.social_efficiency = self.worker_utility.sum()
         self.equality = 1-(self.num_worker_agents)/(self.num_worker_agents-1)*gini(self.pre_tax_wages)
         self.government_reward = ((self.equality)**self.swf_eq_param)*(self.social_efficiency**(1-self.swf_eq_param))
         # 奖励标准化
