@@ -201,9 +201,8 @@ def init_wandb():
     )
 
 
-def wandb_log(name: str, entropy_loss_mean, pg_loss_mean, vf_loss_mean, approx_kl_mean, loss_mean):
+def wandb_log(name: str, pg_loss_mean, vf_loss_mean, approx_kl_mean, loss_mean):
     wandb.log({
-        f"{name}/entropy_loss_mean": entropy_loss_mean,
         f"{name}/pg_loss_mean": pg_loss_mean,
         f"{name}/vf_loss_mean": vf_loss_mean,
         f"{name}/approx_kl_mean": approx_kl_mean,

@@ -42,7 +42,6 @@ class PPO:
         return coef*frac
 
     def update(self):
-        entropy_loss_ls = []
         pg_loss_ls = []
         vf_loss_ls = []
         approx_kl_ls = []
@@ -88,15 +87,13 @@ class PPO:
                 self.optimizer.step()
 
                 # 每个minibatch的损失
-                entropy_loss_ls.append(entropy_loss.item())
                 pg_loss_ls.append(pg_loss.item())
                 vf_loss_ls.append(vf_loss.item())
                 approx_kl_ls.append(approx_kl.item())
                 loss_ls.append(loss.item())
 
         # 一轮epoch的平均损失
-        entropy_loss_mean = np.mean(entropy_loss_ls)
-        self.ent_losses.append(entropy_loss_mean)
+
         pg_loss_mean = np.mean(pg_loss_ls)
         self.pg_losses.append(pg_loss_mean)
         vf_loss_mean = np.mean(vf_loss_ls)
@@ -107,4 +104,4 @@ class PPO:
         self.losses.append(loss_mean)
 
         self.update_step += 1
-        return entropy_loss_mean, pg_loss_mean, vf_loss_mean, approx_kl_mean, loss_mean
+        return pg_loss_mean, vf_loss_mean, approx_kl_mean, loss_mean

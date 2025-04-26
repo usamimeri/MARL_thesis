@@ -1,11 +1,13 @@
 from buffer import RolloutBuffer
 from env import EconomicEnv
 from network import MultiHeadActorCritic
-from utils import load_config, seed_everything
+from utils import load_config, seed_everything, wandb_log, init_wandb
 import torch
 from ppo import PPO
 import numpy as np
 import wandb
+init_wandb()
+np.set_printoptions(suppress=True)
 
 config = load_config()
 env = EconomicEnv()
@@ -96,47 +98,42 @@ for epoch in range(num_updates):
                                   government_value,
                                   government_logprobs,
                                   np.zeros(1))
-        if step > 30:
-            break
-    break
 
-    # with torch.no_grad():
-    #     worker_values = worker_net.get_value(torch.from_numpy(worker_obs).to(device))
-    #     firm_values = firm_net.get_value(torch.from_numpy(firm_obs).to(device))
-    #     government_values = government_net.get_value(torch.from_numpy(government_obs).to(device))
-    # worker_buffer.compute_returns_and_advantage(last_values=worker_values, dones=np.zeros(env.num_worker_agents))
-    # firm_buffer.compute_returns_and_advantage(last_values=firm_values, dones=np.zeros(env.num_firm_agents))
-    # government_buffer.compute_returns_and_advantage(last_values=government_values, dones=np.zeros(1))
+    with torch.no_grad():
+        worker_values = worker_net.get_value(torch.from_numpy(worker_obs).to(device))
+        firm_values = firm_net.get_value(torch.from_numpy(firm_obs).to(device))
+        government_values = government_net.get_value(torch.from_numpy(government_obs).to(device))
+    worker_buffer.compute_returns_and_advantage(last_values=worker_values, dones=np.zeros(env.num_worker_agents))
+    firm_buffer.compute_returns_and_advantage(last_values=firm_values, dones=np.zeros(env.num_firm_agents))
+    government_buffer.compute_returns_and_advantage(last_values=government_values, dones=np.zeros(1))
 
-    # # 必须在这里log 不然get后会变化折叠buffer 就不代表最后一步了
-    # # 这里log的是最后一步的return
-    # for i in range(env.num_worker_agents):
-    #     wandb.log({f"worker/worker_{i+1}_return": ppo_worker.buffer.returns[-1][i]})
-    # for i in range(env.num_firm_agents):
-    #     wandb.log({f"firm/firm_{i+1}_return": ppo_firm.buffer.returns[-1][i]})
-    # wandb.log({"government/return": ppo_government.buffer.returns[-1][0]})
+    # 必须在这里log 不然get后会变化折叠buffer 就不代表最后一步了
+    # 这里log的是最后一步的return
+    for i in range(env.num_worker_agents):
+        wandb.log({f"worker/worker_{i+1}_return": ppo_worker.buffer.returns[-1][i]})
+    for i in range(env.num_firm_agents):
+        wandb.log({f"firm/firm_{i+1}_return": ppo_firm.buffer.returns[-1][i]})
+    wandb.log({"government/return": ppo_government.buffer.returns[-1][0]})
 
-    # # =====================================训练阶段=====================================
-    # worker_entropy_loss_mean, worker_pg_loss_mean, worker_vf_loss_mean, worker_approx_kl_mean, worker_loss_mean = ppo_worker.update()
-    # firm_entropy_loss_mean, firm_pg_loss_mean, firm_vf_loss_mean, firm_approx_kl_mean, firm_loss_mean = ppo_firm.update()
-    # government_entropy_loss_mean, government_pg_loss_mean, government_vf_loss_mean, government_approx_kl_mean, government_loss_mean = ppo_government.update()
+    # =====================================训练阶段=====================================
+    worker_pg_loss_mean, worker_vf_loss_mean, worker_approx_kl_mean, worker_loss_mean = ppo_worker.update()
+    firm_pg_loss_mean, firm_vf_loss_mean, firm_approx_kl_mean, firm_loss_mean = ppo_firm.update()
+    government_pg_loss_mean, government_vf_loss_mean, government_approx_kl_mean, government_loss_mean = ppo_government.update()
 
-    # wandb_log("worker", worker_entropy_loss_mean, worker_pg_loss_mean, worker_vf_loss_mean,
-    #           worker_approx_kl_mean, worker_loss_mean)
-    # wandb_log("firm", firm_entropy_loss_mean, firm_pg_loss_mean, firm_vf_loss_mean,
-    #           firm_approx_kl_mean, firm_loss_mean)
-    # wandb_log("government", government_entropy_loss_mean, government_pg_loss_mean, government_vf_loss_mean,
-    #           government_approx_kl_mean, government_loss_mean)
-    # wandb.log({"social_efficiency": env.social_efficiency, "equality": env.equality})
-    # for i in range(env.num_firm_agents):
-    #     wandb.log({f"firm/firm_{i+1}_asset": env.firm_asset[i],
-    #                f"firm/firm_{i+1}_capital": env.firm_capital[i]})
+    wandb_log("worker", worker_pg_loss_mean, worker_vf_loss_mean,
+              worker_approx_kl_mean, worker_loss_mean)
+    wandb_log("firm",firm_pg_loss_mean, firm_vf_loss_mean,
+              firm_approx_kl_mean, firm_loss_mean)
+    wandb_log("government", government_pg_loss_mean, government_vf_loss_mean,
+              government_approx_kl_mean, government_loss_mean)
+    wandb.log({"social_efficiency": env.social_efficiency, "equality": env.equality})
+    for i in range(env.num_firm_agents):
+        wandb.log({f"firm/firm_{i+1}_asset": env.firm_asset[i]})
 
-    # for i in range(env.num_worker_agents):
-    #     wandb.log({f"worker/worker_{i+1}_asset": env.worker_asset[i],
-    #                f"worker/worker_{i+1}_labor": env.worker_labor[i],
-    #                f"worker/worker_{i+1}_quote": env.worker_quote[i],
-    #                f"worker/worker_{i+1}_in_firm": env.worker_in_firm[i]})
+    for i in range(env.num_worker_agents):
+        wandb.log({f"worker/worker_{i+1}_asset": env.worker_asset[i],
+                   f"worker/worker_{i+1}_labor": env.worker_labor[i],
+                   f"worker/worker_{i+1}_in_firm": env.worker_in_firm[i]})
 
-    # wandb.log({"government/tax_rate": env.tax_rate})
-    # # =====================================训练结束=====================================
+    wandb.log({"government/tax_rate": env.tax_rate})
+    # =====================================训练结束=====================================

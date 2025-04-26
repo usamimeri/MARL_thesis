@@ -21,8 +21,6 @@ class EconomicEnv:
         # ============================一些固定参数==========================
         self.num_worker_agents = self.config['num_worker_agents']
         self.num_firm_agents = self.config['num_firm_agents']
-        self.investment_rate = self.config['constants']['investment_rate']
-        self.depreciation_rate = self.config['constants']['depreciation_rate']
         self.switch_job_penalty = self.config['constants']['switch_job_penalty']
         self.swf_eq_param = self.config['constants']['swf_eq_param']
         self.storage_dpr = self.config['constants']['storage_dpr']
@@ -102,6 +100,7 @@ class EconomicEnv:
         self.firm_total_demand = np.zeros((self.num_firm_agents,), dtype=np.float32)
         # 各企业库存
         self.firm_inventory = np.zeros((self.num_firm_agents,), dtype=np.float32)
+
         # ========================== 政府相关 ==========================
         # 政府税率
         self.tax_rate = self.config['initialize']['tax_rate']
@@ -231,7 +230,7 @@ class EconomicEnv:
         """
         # 每个工人在每家公司的消费量(num_agent,num_firm)，一行是[c_1,c_2,c_3,c_4,c_5]
         self.worker_consumption = self.consumption_range[worker_action[:, :-2]]
-
+        self.logger.info(f"劳动者资产:\n{self.worker_asset}")
         self.logger.info(f"调整前每家公司消费量:\n {self.worker_consumption}\n")
         self.adjust_consumption()
         self.logger.info(f"调整后每家公司消费量:\n {self.worker_consumption}\n")
@@ -240,6 +239,7 @@ class EconomicEnv:
         self.logger.info(f"劳动量:\n{self.worker_labor}")
         if self.episode_start:
             next_worker_in_firm = self.worker_in_firm
+            self.episode_start = False
         else:
             next_worker_in_firm = worker_action[:, -1]
         self.worker_switch_firm = self.judge_switch_firm(next_worker_in_firm=next_worker_in_firm)
@@ -257,7 +257,7 @@ class EconomicEnv:
         """
         # 计算每个工人的总支出
         worker_cost = (self.worker_consumption*self.firm_quote).sum(axis=-1)
-        scale = np.minimum(self.worker_asset/worker_cost, 1.0)
+        scale = np.minimum(self.worker_asset/(worker_cost+1e-5), 1.0)
         # 对于超出预算的工人消费量进行缩放，即对每一行乘以对应的缩放系数
         self.worker_consumption = np.floor(self.worker_consumption*scale[:, np.newaxis])
 
@@ -269,8 +269,8 @@ class EconomicEnv:
             - 计算企业销售额p_{j,t}*C_{j,t}，销量可能来自多个劳动者
         - 工资结算：企业根据劳动量和智能体水平等，发放工资（具体是一个向量和劳动者维度一致）
         """
-
-        self.firm_quote = self.quote_range[firm_action[:, 0]]
+        # 企业是为下期报价的，这个价格用于下期计算
+        next_firm_quote = self.quote_range[firm_action[:, 0]]
         self.logger.info(f"企业报价:\n{self.firm_quote}")
         self.firm_wage = self.wage_range[firm_action[:, 1]]
         self.logger.info(f"企业工资:\n{self.firm_wage}")
@@ -302,6 +302,8 @@ class EconomicEnv:
         self.firm_wage_cost = np.bincount(
             self.worker_in_firm, weights=self.pre_tax_wages, minlength=self.num_firm_agents)
         self.logger.info(f"企业支付出的工资:\n{self.firm_wage_cost}")
+        # 更新企业报价，作为下期开始时的价格
+        self.firm_quote = next_firm_quote
 
     def adjust_overdemand(self):
         """根据企业库存，调整消费者消费量，避免超出企业供应"""
@@ -328,14 +330,17 @@ class EconomicEnv:
         - 计算政府奖励
         - 企业资本投入和折旧
         """
-        self.tax_rate = self.tax_rate_range[government_action[:, 0]].item()
+
         # ===========================企业资产更新=======================
         # 企业税前利润，也是效用和奖励
         self.firm_reward = self.firm_sales-self.firm_wage_cost
-        new_firm_asset = self.firm_asset+(1-self.tax_rate)*self.firm_reward
-        capital_investment = new_firm_asset*self.investment_rate
-        capital_investment = np.clip(capital_investment, 0.0, np.inf)
-        new_firm_asset = new_firm_asset-capital_investment
+
+        worker_tax = (self.pre_tax_wages*self.tax_rate)
+        firm_tax = (np.maximum(self.firm_reward, 0.0)*self.tax_rate)
+        self.total_transfer = worker_tax.sum()+firm_tax.sum()
+        self.logger.info(f"税率:{self.tax_rate},劳动者税:{worker_tax.round(2)}\t企业税:{firm_tax.round(2)}")
+
+        new_firm_asset = self.firm_asset+self.firm_reward-firm_tax
         self.firm_asset_change = new_firm_asset-self.firm_asset
 
         self.logger.info(f"企业旧资产:\n{self.firm_asset}")
@@ -343,39 +348,44 @@ class EconomicEnv:
         self.logger.info(f"企业资产变化:\n{self.firm_asset_change}")
         self.firm_asset = new_firm_asset
 
-        self.firm_capital = self.firm_capital*(1-self.depreciation_rate)+capital_investment
         # 征税
-        worker_tax = (self.pre_tax_wages*self.tax_rate).sum()
-        firm_tax = (self.firm_reward*self.tax_rate).sum()
-        self.total_transfer = worker_tax+firm_tax
-        self.logger.info(f"劳动者税:{worker_tax}\t企业税:{firm_tax}")
 
         # ===========================转移支付==========================
         # 转移支付
         weights = inverse_weight_normalized(self.worker_asset)
         transfer_to_worker = self.total_transfer*weights
-        self.logger.info(f"转移支付:\n{transfer_to_worker}")
         # ==========================资产更新==========================
         # 更新劳动者资产
+        self.logger.info(f"劳动者旧资产:\n{self.worker_asset.round(2)}")
+        self.logger.info(f"利率:{self.interest_rate},税率:{self.tax_rate}")
+        self.logger.info(f"劳动者税前工资:\n{self.pre_tax_wages.round(2)}")
+        self.logger.info(f"劳动者消费额:\n{self.worker_cost.round(2)}")
+        self.logger.info(f"转移支付:\n{transfer_to_worker}")
         new_asset = (self.worker_asset*(1+self.interest_rate)+self.pre_tax_wages*(1-self.tax_rate) +
                      transfer_to_worker-self.worker_cost)
         self.worker_asset_change = new_asset-self.worker_asset
-        self.logger.info(f"劳动者旧资产:\n{self.worker_asset}")
-        self.logger.info(f"劳动者新资产:\n{new_asset}")
-        self.logger.info(f"劳动者资产变化:\n{self.worker_asset_change}")
+
+        self.logger.info(f"劳动者新资产:\n{new_asset.round(2)}")
+        self.logger.info(f"劳动者资产变化:\n{self.worker_asset_change.round(2)}")
         self.worker_asset = new_asset
+
+        # 这里是下期利率，不是这期的
+        self.tax_rate = self.tax_rate_range[government_action[:, 0]].item()
         # ==========================效用计算==========================
         # 计算劳动者效用（相对风险厌恶为0.33），也是奖励
-        self.worker_utility = (self.worker_total_consumption**0.67)/0.67-self.worker_labor_aversion * \
+        self.worker_utility = (self.worker_total_consumption**0.9-1)/0.9-self.worker_labor_aversion * \
             self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len
 
         self.worker_firm_len = (self.worker_firm_len+self.worker_labor)*(1-self.worker_switch_firm)
         self.social_efficiency = self.worker_utility.sum()
+        self.social_efficiency = np.clip(self.social_efficiency, 0.01, np.inf)
         self.equality = 1-(self.num_worker_agents)/(self.num_worker_agents-1)*gini(self.pre_tax_wages)
         self.government_reward = ((self.equality)**self.swf_eq_param)*(self.social_efficiency**(1-self.swf_eq_param))
-        self.logger.info(f"劳动者效用:\n{self.worker_utility}")
-        self.logger.info(f"企业效用:\n{self.firm_reward}")
-        self.logger.info(f"社会效率:\n{self.social_efficiency}\t社会公平性:\n{self.equality}\t政府奖励:\n{self.government_reward}")
+        self.logger.info(f"劳动者效用:\n{self.worker_utility.round(2)}")
+        self.logger.info(f"企业效用:\n{self.firm_reward.round(2)}")
+        self.logger.info(
+            f"社会效率:\n{self.social_efficiency}\t社会公平性:\n{self.equality}\t政府奖励:\n{self.government_reward.round(2)}")
+        self.logger.info(f"\n=====================EPISODE END=====================\n")
 
         # 奖励标准化
         # self.rms_worker_reward.update(self.worker_utility)
