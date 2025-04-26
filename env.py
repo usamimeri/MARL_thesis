@@ -49,15 +49,17 @@ class EconomicEnv:
         # 劳动者资产
         self.worker_asset = np.full((self.num_worker_agents, ),
                                     self.config['initialize']['worker_asset'], dtype=np.float32)
+        # 劳动者劳动厌恶系数（写死避免每次重置不一样影响监控）
+        # self.worker_labor_aversion = distribute_elements(
+        #     self.config['constants']['labor_aversion_range'], self.num_worker_agents)
+        self.worker_labor_aversion = np.array([0.45, 0.7, 0.2, 0.7, 0.45, 0.7, 0.45, 0.2, 0.2, 0.2])
         # 劳动者技能禀赋
-        self.worker_levels = generate_levels(self.num_worker_agents)
-        # 劳动者劳动厌恶系数
-        self.worker_labor_aversion = distribute_elements(
-            self.config['constants']['labor_aversion_range'], self.num_worker_agents)
-
+        # self.worker_levels = generate_levels(self.num_worker_agents)
+        self.worker_levels = np.array([2.0, 0.79, 0.59, 0.5, 1.36, 1.18, 1.03, 0.69, 0.90, 1.60])
         # 初始化每个劳动者所属的企业
-        self.worker_in_firm = np.array(distribute_evenly(
-            self.num_worker_agents, self.num_firm_agents), dtype=np.int32)
+        # self.worker_in_firm = np.array(distribute_evenly(
+        #     self.num_worker_agents, self.num_firm_agents), dtype=np.int32)
+        self.worker_in_firm = np.array([0, 3, 4, 4, 2, 2, 0, 1, 3, 1], dtype=np.int32)
         # 劳动者劳动量
         self.worker_labor = np.zeros((self.num_worker_agents,), dtype=np.float32)
         # 劳动者累计消费量(求和各个公司)

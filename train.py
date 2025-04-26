@@ -6,6 +6,8 @@ import torch
 from ppo import PPO
 import numpy as np
 import wandb
+import os
+from datetime import datetime
 init_wandb()
 np.set_printoptions(suppress=True)
 
@@ -36,7 +38,8 @@ ppo_government = PPO(config["train"]["government_lr"], government_buffer, govern
 seed_everything(config["train"]["seed"])
 num_updates = config["train"]["total_timesteps"] // num_steps
 
-
+modelpath = f"models/{datetime.now().strftime('%m-%d_%H-%M')}"
+os.makedirs(modelpath, exist_ok=True)
 for epoch in range(num_updates):
     print(f"epoch: {epoch}")
     if epoch % 50 == 0:
@@ -139,4 +142,13 @@ for epoch in range(num_updates):
 
     wandb.log({"government/tax_rate": env.tax_rate})
     env.logger.enabled = False
+    if epoch % 200 == 0:
+        # 保存模型到本地
+        torch.save(worker_net.state_dict(), f"{modelpath}/worker_net_{epoch}.pth")
+        torch.save(firm_net.state_dict(), f"{modelpath}/firm_net_{epoch}.pth")
+        torch.save(government_net.state_dict(), f"{modelpath}/government_net_{epoch}.pth")
     # =====================================训练结束=====================================
+# 最终模型
+torch.save(worker_net.state_dict(), f"{modelpath}/worker_net_final.pth")
+torch.save(firm_net.state_dict(), f"{modelpath}/firm_net_final.pth")
+torch.save(government_net.state_dict(), f"{modelpath}/government_net_final.pth")
