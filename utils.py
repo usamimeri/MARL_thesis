@@ -18,7 +18,7 @@ def load_config(config_path='config.yaml') -> dict:
 def generate_levels(num_worker_agents) -> np.ndarray:
     """利用标准正态分布初始化技能禀赋"""
     min_value = 0.5           # 技能禀赋最小值
-    max_value = 2.0           # 技能禀赋最大值
+    max_value = 1.5           # 技能禀赋最大值
     min_percentile = norm.cdf(min_value)
     # 构造均匀的分位点
     max_percentile = norm.cdf(max_value)
@@ -195,7 +195,7 @@ def seed_everything(seed: int):
 def init_wandb():
     config = load_config()
     wandb.init(
-        project="ppo-learning",
+        project="Thesis",
         name=f"Economic-PPO-{datetime.now().strftime('%m-%d_%H-%M')}",
         config=config,
     )
@@ -225,3 +225,5 @@ class Logger:
             self.logger.info(message)
 
 
+if __name__ == "__main__":
+    print(generate_levels(20))

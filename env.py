@@ -24,6 +24,9 @@ class EconomicEnv:
         self.switch_job_penalty = self.config['constants']['switch_job_penalty']
         self.swf_eq_param = self.config['constants']['swf_eq_param']
         self.storage_dpr = self.config['constants']['storage_dpr']
+        self.firm_tax_rate = self.config['constants']['firm_tax_rate']
+        self.efficiency_scale = self.config['constants']['efficiency_scale']
+        self.consumption_scale = self.config['constants']['consumption_scale']
         # ============================一些范围参数==========================
         self.quote_range = np.array(self.config['constants']['quote_range'])
         self.labor_range = np.array(self.config['constants']['labor_range'])
@@ -52,14 +55,21 @@ class EconomicEnv:
         # 劳动者劳动厌恶系数（写死避免每次重置不一样影响监控）
         # self.worker_labor_aversion = distribute_elements(
         #     self.config['constants']['labor_aversion_range'], self.num_worker_agents)
-        self.worker_labor_aversion = np.array([0.45, 0.7, 0.2, 0.7, 0.45, 0.7, 0.45, 0.2, 0.2, 0.2])
+        self.worker_labor_aversion = np.array([1.25, 1., 1.55, 1., 0.75, 0.75, 0.4, 1.25, 1.25, 0.4, 1.55,
+                                               1.25, 1.55, 1., 1., 1.55, 0.4, 0.75, 0.75, 0.4])
         # 劳动者技能禀赋
-        # self.worker_levels = generate_levels(self.num_worker_agents)
-        self.worker_levels = np.array([2.0, 0.79, 0.59, 0.5, 1.36, 1.18, 1.03, 0.69, 0.90, 1.60])
+
+        # 按范围随机采样
+        self.worker_levels = np.array([
+            0.70, 0.76, 0.82, 0.86, 0.90,   # 来自区间 0.7 ~ 0.9，5个
+            1.17, 0.96, 1.15, 1.19, 1.06,
+            1.02, 1.15, 0.98, 1.11, 1.02,   # 来自区间 0.95 ~ 1.2，10个
+            1.30, 1.33, 1.36, 1.41, 1.45   # 来自区间 1.3 ~ 1.45，5个
+        ])
         # 初始化每个劳动者所属的企业
         # self.worker_in_firm = np.array(distribute_evenly(
         #     self.num_worker_agents, self.num_firm_agents), dtype=np.int32)
-        self.worker_in_firm = np.array([0, 3, 4, 4, 2, 2, 0, 1, 3, 1], dtype=np.int32)
+        self.worker_in_firm = np.array([0, 3, 4, 4, 2, 2, 0, 1, 3, 1]*2, dtype=np.int32)
         # 劳动者劳动量
         self.worker_labor = np.zeros((self.num_worker_agents,), dtype=np.float32)
         # 劳动者累计消费量(求和各个公司)
@@ -81,8 +91,7 @@ class EconomicEnv:
         self.firm_capital = np.full((self.num_firm_agents,),
                                     self.config['initialize']['firm_capital'], dtype=np.float32)
         # 企业资本弹性
-        self.firm_capital_elasticity = distribute_elements(
-            self.config['constants']['captial_elasticity'], self.num_firm_agents)
+        self.firm_capital_elasticity = np.array([0.25, 0.45, 0.7, 0.25, 0.45])
         # 各企业报价
         self.firm_quote = np.full((self.num_firm_agents,),
                                   self.config['initialize']['quote'])
@@ -156,9 +165,11 @@ class EconomicEnv:
             self.worker_asset_change[:, np.newaxis],
             self.worker_total_consumption[:, np.newaxis],
             self.worker_labor[:, np.newaxis],
+            # one-hot编码
+            np.eye(self.num_worker_agents, self.num_worker_agents, dtype=np.float32)
         ], axis=-1).astype(np.float32)
 
-        # # normalization
+        # normalization
         # self.rms_worker.update(worker_obs)
         # worker_obs = ((worker_obs-self.rms_worker.mean)/np.sqrt(self.rms_worker.var+1e-5)).astype(np.float32)
         return worker_obs
@@ -189,6 +200,7 @@ class EconomicEnv:
             self.firm_production[:, np.newaxis],
             self.firm_total_demand[:, np.newaxis],
             self.firm_inventory[:, np.newaxis],
+            np.eye(self.num_firm_agents, self.num_firm_agents, dtype=np.float32)
         ], axis=-1).astype(np.float32)
 
         # # normalization
@@ -215,7 +227,7 @@ class EconomicEnv:
             self.firm_asset_change,
         ])[np.newaxis, :].astype(np.float32)
 
-        # # normalization
+        # normalization
         # self.rms_government.update(government_obs)
         # government_obs = ((government_obs-self.rms_government.mean) /
         #                   np.sqrt(self.rms_government.var+1e-5)).astype(np.float32)
@@ -337,8 +349,8 @@ class EconomicEnv:
         # 企业税前利润，也是效用和奖励
         self.firm_reward = self.firm_sales-self.firm_wage_cost
 
-        worker_tax = (self.pre_tax_wages*self.tax_rate)
-        firm_tax = (np.maximum(self.firm_reward, 0.0)*self.tax_rate)
+        worker_tax = self.calculate_tax(self.pre_tax_wages)
+        firm_tax = (np.maximum(self.firm_reward, 0.0)*self.firm_tax_rate)
         self.total_transfer = worker_tax.sum()+firm_tax.sum()
         self.logger.info(f"税率:{self.tax_rate},劳动者税:{worker_tax.round(2)}\t企业税:{firm_tax.round(2)}")
 
@@ -363,7 +375,7 @@ class EconomicEnv:
         self.logger.info(f"劳动者税前工资:\n{self.pre_tax_wages.round(2)}")
         self.logger.info(f"劳动者消费额:\n{self.worker_cost.round(2)}")
         self.logger.info(f"转移支付:\n{transfer_to_worker}")
-        new_asset = (self.worker_asset*(1+self.interest_rate)+self.pre_tax_wages*(1-self.tax_rate) +
+        new_asset = (self.worker_asset*(1+self.interest_rate)+self.pre_tax_wages - worker_tax +
                      transfer_to_worker-self.worker_cost)
         self.worker_asset_change = new_asset-self.worker_asset
 
@@ -375,21 +387,22 @@ class EconomicEnv:
         self.tax_rate = self.tax_rate_range[government_action[:, 0]].item()
         # ==========================效用计算==========================
         # 计算劳动者效用（相对风险厌恶为0.33），也是奖励
-        self.worker_utility = (self.worker_total_consumption**0.9-1)/0.9-self.worker_labor_aversion * \
+        self.worker_utility = ((self.worker_total_consumption/self.consumption_scale)**0.9-1)/0.9-self.worker_labor_aversion * \
             self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len
 
         self.worker_firm_len = (self.worker_firm_len+self.worker_labor)*(1-self.worker_switch_firm)
         self.social_efficiency = self.worker_utility.sum()
         self.social_efficiency = np.clip(self.social_efficiency, 0.01, np.inf)
         self.equality = 1-(self.num_worker_agents)/(self.num_worker_agents-1)*gini(self.pre_tax_wages)
-        self.government_reward = ((self.equality)**self.swf_eq_param)*(self.social_efficiency**(1-self.swf_eq_param))
+        self.government_reward = ((self.equality)**self.swf_eq_param) * \
+            ((self.social_efficiency/self.efficiency_scale)**(1-self.swf_eq_param))
         self.logger.info(f"劳动者效用:\n{self.worker_utility.round(2)}")
         self.logger.info(f"企业效用:\n{self.firm_reward.round(2)}")
         self.logger.info(
             f"社会效率:\n{self.social_efficiency}\t社会公平性:\n{self.equality}\t政府奖励:\n{self.government_reward.round(2)}")
         self.logger.info(f"\n=====================EPISODE END=====================\n")
 
-        # 奖励标准化
+        # # 奖励标准化
         # self.rms_worker_reward.update(self.worker_utility)
         # self.rms_firm_reward.update(self.firm_reward)
         # self.rms_government_reward.update(self.government_reward)
@@ -401,6 +414,39 @@ class EconomicEnv:
         # self.government_reward = ((self.government_reward-self.rms_government_reward.mean) /
         #                           np.sqrt(self.rms_government_reward.var+1e-5)).astype(np.float32)
 
+    def calculate_tax(self, income):
+        """
+        income: np.array, 税前收入
+        tax_rate: float, 起始税率
+        """
+        tax = np.zeros_like(income)
+
+        # 第一段：0-1000 采取免税政策
+        taxable = np.minimum(income, 1000)
+        tax += taxable * 0
+
+        # 第二段：1000-2000 基础税率
+        taxable = np.clip(income - 1000, 0, 1000)
+        tax += taxable * self.tax_rate
+
+        # 第三段：2000-3000 基础税率+5%
+        taxable = np.clip(income - 2000, 0, 1000)
+        tax += taxable * (self.tax_rate + 0.05)
+
+        # 第四段 3000-4000 基础税率+10%
+        taxable = np.clip(income - 3000, 0, 1000)
+        tax += taxable * (self.tax_rate + 0.10)
+
+        # 第五段 4000-5000 基础税率+15%
+        taxable = np.clip(income - 4000, 0, 1000)
+        tax += taxable * (self.tax_rate + 0.15)
+
+        # 第六段 5000及以上 基础税率+25%
+        taxable = np.clip(income - 5000, 0, None)
+        tax += taxable * (self.tax_rate + 0.25)
+
+        return tax
+
     def scalar_repeat(self, scalar: float, n: int) -> np.ndarray:
         "将标量扩展为形状为 (n, ) 的向量。"
         return np.full((n, ), scalar)
@@ -411,3 +457,14 @@ class EconomicEnv:
 
     def market_clearing(self):
         pass
+
+
+if __name__ == "__main__":
+    env = EconomicEnv()
+    env.reset()
+    worker_obs = env.construct_worker_obs()
+    firm_obs = env.construct_firm_obs()
+    government_obs = env.construct_government_obs()
+    print(worker_obs.shape)
+    print(firm_obs.shape)
+    print(government_obs.shape)

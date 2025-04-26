@@ -38,12 +38,9 @@ ppo_government = PPO(config["train"]["government_lr"], government_buffer, govern
 seed_everything(config["train"]["seed"])
 num_updates = config["train"]["total_timesteps"] // num_steps
 
-modelpath = f"models/{datetime.now().strftime('%m-%d_%H-%M')}"
-os.makedirs(modelpath, exist_ok=True)
+
 for epoch in range(num_updates):
     print(f"epoch: {epoch}")
-    if epoch % 50 == 0:
-        env.logger.enabled = True
     env.reset()
     ppo_worker.buffer.reset()
     ppo_firm.buffer.reset()
@@ -114,11 +111,9 @@ for epoch in range(num_updates):
 
     # 必须在这里log 不然get后会变化折叠buffer 就不代表最后一步了
     # 这里log的是最后一步的return
-    for i in range(env.num_worker_agents):
-        wandb.log({f"worker/worker_{i+1}_return": ppo_worker.buffer.returns[-1][i]})
-    for i in range(env.num_firm_agents):
-        wandb.log({f"firm/firm_{i+1}_return": ppo_firm.buffer.returns[-1][i]})
-    wandb.log({"government/return": ppo_government.buffer.returns[-1][0]})
+    wandb.log({"worker/worker_return": ppo_worker.buffer.returns[-1].mean(),
+               "firm/firm_return": ppo_firm.buffer.returns[-1].mean(),
+               "government/return": ppo_government.buffer.returns[-1][0]})
 
     # =====================================训练阶段=====================================
     worker_pg_loss_mean, worker_vf_loss_mean, worker_approx_kl_mean, worker_loss_mean = ppo_worker.update()
@@ -136,19 +131,13 @@ for epoch in range(num_updates):
         wandb.log({f"firm/firm_{i+1}_asset": env.firm_asset[i]})
 
     for i in range(env.num_worker_agents):
-        wandb.log({f"worker/worker_{i+1}_asset": env.worker_asset[i],
-                   f"worker/worker_{i+1}_labor": env.worker_labor[i],
-                   f"worker/worker_{i+1}_in_firm": env.worker_in_firm[i]})
+        wandb.log({f"worker/worker_{i+1}_asset": env.worker_asset[i]})
 
-    wandb.log({"government/tax_rate": env.tax_rate})
-    env.logger.enabled = False
-    if epoch % 200 == 0:
-        # 保存模型到本地
-        torch.save(worker_net.state_dict(), f"{modelpath}/worker_net_{epoch}.pth")
-        torch.save(firm_net.state_dict(), f"{modelpath}/firm_net_{epoch}.pth")
-        torch.save(government_net.state_dict(), f"{modelpath}/government_net_{epoch}.pth")
+    wandb.log({"government/tax_rate": env.tax_rate, "government/total_transfer": env.total_transfer})
     # =====================================训练结束=====================================
 # 最终模型
+modelpath = f"models/{datetime.now().strftime('%m-%d_%H-%M')}"
+os.makedirs(modelpath, exist_ok=True)
 torch.save(worker_net.state_dict(), f"{modelpath}/worker_net_final.pth")
 torch.save(firm_net.state_dict(), f"{modelpath}/firm_net_final.pth")
 torch.save(government_net.state_dict(), f"{modelpath}/government_net_final.pth")
