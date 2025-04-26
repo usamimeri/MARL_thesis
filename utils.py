@@ -1,11 +1,12 @@
-from typing import List
 import yaml
 import numpy as np
 from scipy.stats import norm
 import torch
 import wandb
-from datetime import datetime
 import random
+from loguru import logger
+import os
+from datetime import datetime
 
 
 def load_config(config_path='config.yaml') -> dict:
@@ -49,7 +50,6 @@ def distribute_evenly(total: int, max_label: int) -> np.ndarray:
     np.random.shuffle(result)
 
     return np.array(result)
-
 
 
 def inverse_weight_normalized(x: np.ndarray) -> np.ndarray:
@@ -210,4 +210,18 @@ def wandb_log(name: str, entropy_loss_mean, pg_loss_mean, vf_loss_mean, approx_k
         f"{name}/loss_mean": loss_mean,
     })
 
+
+
+class Logger:
+    def __init__(self, log_dir="logs", level="INFO"):
+        os.makedirs(log_dir, exist_ok=True)
+
+        current_time = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        log_file = os.path.join(log_dir, f"{current_time}.log")
+        logger.remove()
+        logger.add(log_file, encoding="utf-8", level=level)
+        self.logger = logger
+
+    def info(self, message):
+        self.logger.info(message)
 

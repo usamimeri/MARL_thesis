@@ -48,7 +48,7 @@ size:
   observation:
     worker: 24 
     firm: 23
-    government: 48
+    government: 32
 
 initialize:
   quote: 5.0 # 初始报价

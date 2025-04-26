@@ -4,10 +4,13 @@ from utils import (load_config,
                    distribute_elements,
                    inverse_weight_normalized,
                    gini,
+                   RunningMeanStd,
+                   get_logger
                    )
 import numpy as np
-from utils import RunningMeanStd
-import warnings
+
+
+logger = get_logger()
 
 
 class EconomicEnv:
@@ -34,15 +37,15 @@ class EconomicEnv:
         self.tax_rate_range = np.array(self.config['constants']['tax_rate_range'])
 
         # ====================== 用于标准化输入状态 ==========================
-        # 用于标准化输入状态
-        self.rms_worker = RunningMeanStd(shape=(self.worker_obs_dim,))
-        self.rms_firm = RunningMeanStd(shape=(self.firm_obs_dim,))
-        self.rms_government = RunningMeanStd(shape=(self.government_obs_dim,))
+        # # 用于标准化输入状态
+        # self.rms_worker = RunningMeanStd(shape=(self.worker_obs_dim,))
+        # self.rms_firm = RunningMeanStd(shape=(self.firm_obs_dim,))
+        # self.rms_government = RunningMeanStd(shape=(self.government_obs_dim,))
 
-        # 用于标准化奖励
-        self.rms_worker_reward = RunningMeanStd(shape=(self.num_worker_agents,))
-        self.rms_firm_reward = RunningMeanStd(shape=(self.num_firm_agents,))
-        self.rms_government_reward = RunningMeanStd(shape=(1,))
+        # # 用于标准化奖励
+        # self.rms_worker_reward = RunningMeanStd(shape=(self.num_worker_agents,))
+        # self.rms_firm_reward = RunningMeanStd(shape=(self.num_firm_agents,))
+        # self.rms_government_reward = RunningMeanStd(shape=(1,))
 
     def reset(self):
         # ========================== 劳动者相关 ==========================
@@ -69,6 +72,8 @@ class EconomicEnv:
         self.worker_firm_len = np.zeros((self.num_worker_agents,), dtype=np.float32)
         # 各劳动者资产变化
         self.worker_asset_change = np.zeros((self.num_worker_agents,), dtype=np.float32)
+        # 各劳动者消费额
+        self.worker_cost = np.zeros((self.num_worker_agents,), dtype=np.float32)
         # ========================== 企业相关 ==========================
         # 企业资产
         self.firm_asset = np.full((self.num_firm_agents,),
@@ -87,14 +92,17 @@ class EconomicEnv:
                                  self.config['initialize']['wage'])
         # 各企业销售额
         self.firm_sales = np.zeros((self.num_firm_agents,), dtype=np.float32)
-        # 企业税前利润
-        self.firm_pre_tax_profit = np.zeros((self.num_firm_agents,), dtype=np.float32)
+
         # 各企业所拥有的劳动量
         self.firm_labor = np.zeros((self.num_firm_agents,), dtype=np.float32)
         # 各企业生产量
         self.firm_production = np.zeros((self.num_firm_agents,), dtype=np.float32)
         # 各企业资产变化
         self.firm_asset_change = np.zeros((self.num_firm_agents,), dtype=np.float32)
+        # 各企业在自身上的消费者总需求量
+        self.firm_total_demand = np.zeros((self.num_firm_agents,), dtype=np.float32)
+        # 各企业库存
+        self.firm_inventory = np.zeros((self.num_firm_agents,), dtype=np.float32)
         # ========================== 政府相关 ==========================
         # 政府税率
         self.tax_rate = self.config['initialize']['tax_rate']
@@ -150,55 +158,67 @@ class EconomicEnv:
             self.worker_labor[:, np.newaxis],
         ], axis=-1).astype(np.float32)
 
-        # normalization
-        self.rms_worker.update(worker_obs)
-        worker_obs = ((worker_obs-self.rms_worker.mean)/np.sqrt(self.rms_worker.var+1e-5)).astype(np.float32)
+        # # normalization
+        # self.rms_worker.update(worker_obs)
+        # worker_obs = ((worker_obs-self.rms_worker.mean)/np.sqrt(self.rms_worker.var+1e-5)).astype(np.float32)
         return worker_obs
 
     def construct_firm_obs(self) -> np.ndarray:
         """构造企业的部分观测
-        - 上期销量
-        - 目前资产
-        - 上期税前收入
-        - 本期政府税率
-        - 上期各企业工资水平
-        - 上期各企业报价
+        - 本期每个企业的价格
+        - 本期每个企业的工资
+        - 上期每个企业的产量
+        - 政府税率
+        - 自身资产
+        - 自身资本
+        - 上期资产变动
+        - 技术水平参数
+        - 上期生产量
+        - 上期在自己身上的总需求量
+        - 上期库存
         """
         firm_obs = np.concatenate([
+            self.vector2obs(self.firm_quote, self.num_firm_agents),
+            self.vector2obs(self.firm_wage, self.num_firm_agents),
+            self.vector2obs(self.firm_production, self.num_firm_agents),
+            np.full((self.num_firm_agents, 1), self.tax_rate),
             self.firm_asset[:, np.newaxis],
-            self.firm_pre_tax_profit[:, np.newaxis],
-            self.scalar_repeat(self.tax_rate, self.num_firm_agents)[:, np.newaxis],
-            # (num_firm)->(1,num_firm)->(num_firm,num_firm)
-            self.firm_wage[np.newaxis, :].repeat(self.num_firm_agents, axis=0),
-            self.firm_quote[np.newaxis, :].repeat(self.num_firm_agents, axis=0),
+            self.firm_capital[:, np.newaxis],
+            self.firm_asset_change[:, np.newaxis],
+            self.firm_capital_elasticity[:, np.newaxis],
+            self.firm_production[:, np.newaxis],
+            self.firm_total_demand[:, np.newaxis],
+            self.firm_inventory[:, np.newaxis],
         ], axis=-1).astype(np.float32)
 
-        # normalization
-        self.rms_firm.update(firm_obs)
-        firm_obs = ((firm_obs-self.rms_firm.mean)/np.sqrt(self.rms_firm.var+1e-5)).astype(np.float32)
+        # # normalization
+        # self.rms_firm.update(firm_obs)
+        # firm_obs = ((firm_obs-self.rms_firm.mean)/np.sqrt(self.rms_firm.var+1e-5)).astype(np.float32)
         return firm_obs
 
     def construct_government_obs(self) -> np.ndarray:
         """构造政府观测
-        - 各劳动者当前资产
-        - 各企业当前资产
-        - 各企业当前工资水平
-        - 上一期总转移支付
-        - 上一期税率
-        由于只有一个政府，输出一般是(1,government_obs_dim)
+        - 各个劳动者资产
+        - 各个企业资产
+        - 本期税率
+        - 本期转移支付（总税收）
+        - 本期各个劳动者的资产变化
+        - 本期各企业的资产变化
+        只有一个政府，输出一般是(1,government_obs_dim)
         """
         government_obs = np.concatenate([
             self.worker_asset,
             self.firm_asset,
-            self.firm_wage,
+            np.array([self.tax_rate]),
             np.array([self.total_transfer]),
-            np.array([self.tax_rate])
+            self.worker_asset_change,
+            self.firm_asset_change,
         ])[np.newaxis, :].astype(np.float32)
 
-        # normalization
-        self.rms_government.update(government_obs)
-        government_obs = ((government_obs-self.rms_government.mean) /
-                          np.sqrt(self.rms_government.var+1e-5)).astype(np.float32)
+        # # normalization
+        # self.rms_government.update(government_obs)
+        # government_obs = ((government_obs-self.rms_government.mean) /
+        #                   np.sqrt(self.rms_government.var+1e-5)).astype(np.float32)
         return government_obs
 
     def worker_settlement(self, worker_action: np.ndarray) -> None:
@@ -210,16 +230,27 @@ class EconomicEnv:
 
 
         """
-        self.worker_consumption = self.consumption_range[worker_action[:, 0]]
-        self.worker_labor = self.labor_range[worker_action[:, 1]]
-        self.worker_quote = self.quote_range[worker_action[:, 2]]
-        # 跳槽指示
-        next_worker_in_firm = worker_action[:, 3]
+        # 每个工人在每家公司的消费量(num_agent,num_firm)，一行是[c_1,c_2,c_3,c_4,c_5]
+        self.worker_consumption = self.consumption_range[worker_action[:, :-2]]
+        self.adjust_consumption()
+        self.worker_labor = self.labor_range[worker_action[:, -2]]
+        next_worker_in_firm = worker_action[:, -1]
         self.worker_switch_firm = self.judge_switch_firm(next_worker_in_firm=next_worker_in_firm)
         # 更新劳动者所属企业
         self.worker_in_firm = next_worker_in_firm
         # 各个公司的劳动总量
         self.firm_labor = self.compute_firm_labor()
+
+    def adjust_consumption(self):
+        """根据劳动者的预算，调整消费量保证不超出预算
+
+        若超出预算则进行：n'_i = n_i \times \frac{B}{\sum_{i=1}^5 n_i p_i}缩放
+        """
+        # 计算每个工人的总支出
+        worker_cost = (self.worker_consumption*self.firm_quote).sum(axis=-1)
+        scale = np.minimum(self.worker_asset/worker_cost, 1.0)
+        # 对于超出预算的工人消费量进行缩放，即对每一行乘以对应的缩放系数
+        self.worker_consumption = np.floor(self.worker_consumption*scale[:, np.newaxis])
 
     def firm_settlement(self, firm_action: np.ndarray) -> None:
         """企业执行动作后结算
@@ -236,19 +267,33 @@ class EconomicEnv:
         self.firm_production = np.floor((self.firm_capital**self.firm_capital_elasticity) *
                                         (self.firm_labor**(1-self.firm_capital_elasticity)))
 
-        # 市场清算
-        self.market_clearing()
-        # 工资结算，对应每个劳动者获得的工资
+        # 更新当前库存
+        self.firm_inventory += self.firm_production
+        self.adjust_overdemand()
+        # 计算企业销售额
+        self.firm_sales = (self.firm_quote*self.worker_consumption).sum(axis=0)
+        # 计算工人消费额
+        self.worker_cost = (self.firm_quote*self.worker_consumption).sum(axis=1)
+        # 工资结算，对应每个劳动者获得的税前工资
         self.pre_tax_wages = self.worker_labor*self.worker_levels*self.firm_wage[self.worker_in_firm]
-        # 计算企业支付出的工资 TODO：这里其实和compute labor实现一样的
+        # 计算企业支付出的工资
         self.firm_wage_cost = np.bincount(
             self.worker_in_firm, weights=self.pre_tax_wages, minlength=self.num_firm_agents)
+
+    def adjust_overdemand(self):
+        """根据企业库存，调整消费者消费量，避免超出企业供应"""
+        # 计算每个企业的总需求量
+        total_firm_demand = self.worker_consumption.sum(axis=0)
+        scale = np.minimum(self.firm_inventory/total_firm_demand, 1.0)
+        # 对每一列，乘以缩放系数。一列代表一个公司，列求和是在这家公司总消费量
+        self.worker_consumption = np.floor(self.worker_consumption*scale)
+        # 更新总需求量
+        self.firm_total_demand = self.worker_consumption.sum(axis=0)
 
     def government_settlement(self, government_action: np.ndarray) -> None:
         """政府执行动作后结算
         - 计算企业效用，即奖励（就是税前利润）
         - 更新企业资产（计算税前利润）
-        - 企业资本投入和折旧
         - 企业和劳动者征税
         - 计算转移支付（与资产成反比）
         - 更新劳动者资产（上一期资产+转移支付+税前工资-税收-消费额）*（1+利率）
@@ -256,28 +301,35 @@ class EconomicEnv:
         - 计算社会效率
         - 计算社会公平性（根据基尼系数）
         - 计算政府奖励
+        - 企业资本投入和折旧
         """
         self.tax_rate = self.tax_rate_range[government_action[:, 0]].item()
+        # ===========================企业资产更新=======================
         # 企业税前利润，也是效用和奖励
-        self.firm_pre_tax_profit = self.firm_sales-self.firm_wage_cost
-        capital_investment = self.firm_asset*self.investment_rate
+        self.firm_reward = self.firm_sales-self.firm_wage_cost
+        new_firm_asset = self.firm_asset+(1-self.tax_rate)*self.firm_reward
+        capital_investment = new_firm_asset*self.investment_rate
         capital_investment = np.clip(capital_investment, 0.0, np.inf)
-        self.firm_asset = self.firm_asset-capital_investment+(1-self.tax_rate)*self.firm_pre_tax_profit
+        new_firm_asset = new_firm_asset-capital_investment
+        self.firm_asset_change = new_firm_asset-self.firm_asset
+        self.firm_asset = new_firm_asset
+
         self.firm_capital = self.firm_capital*(1-self.depreciation_rate)+capital_investment
         # 征税
         worker_tax = self.pre_tax_wages*self.tax_rate
-        firm_tax = self.firm_pre_tax_profit*self.tax_rate
+        firm_tax = self.firm_reward*self.tax_rate
         self.total_transfer = worker_tax.sum()+firm_tax.sum()
-        self.total_transfer = np.clip(self.total_transfer, 0.0, 10000.0)
+        # ===========================转移支付==========================
         # 转移支付
         weights = inverse_weight_normalized(self.worker_asset)
         transfer_to_worker = self.total_transfer*weights
+        # ==========================资产更新==========================
         # 更新劳动者资产
-        new_asset = self.worker_asset+self.pre_tax_wages + \
-            transfer_to_worker-worker_tax-self.worker_cost
-        # 不允许负债 TODO:有点粗糙，正常来说要避免负债的，后面优化的时候再改
-        self.worker_asset = np.clip(new_asset, 0.0, 20000.0)
-
+        new_asset = (self.worker_asset+self.pre_tax_wages +
+                     transfer_to_worker-worker_tax-self.worker_cost)*(1+self.interest_rate)
+        self.worker_asset_change = new_asset-self.worker_asset
+        self.worker_asset = new_asset
+        # ==========================效用计算==========================
         # 计算劳动者效用（相对风险厌恶为0.1固定，1-0.1=0.9），也是奖励
         self.worker_utility = (self.worker_consumption**0.9)/0.9-self.worker_labor_aversion * \
             self.worker_labor-self.switch_job_penalty*self.worker_switch_firm*self.worker_firm_len
@@ -286,18 +338,17 @@ class EconomicEnv:
         self.social_efficiency = np.clip(self.worker_utility.sum(), a_min=0.01, a_max=np.inf)
         self.equality = 1-(self.num_worker_agents)/(self.num_worker_agents-1)*gini(self.pre_tax_wages)
         self.government_reward = ((self.equality)**self.swf_eq_param)*(self.social_efficiency**(1-self.swf_eq_param))
-        self.firm_reward = self.firm_pre_tax_profit.copy()
         # 奖励标准化
-        self.rms_worker_reward.update(self.worker_utility)
-        self.rms_firm_reward.update(self.firm_reward)
-        self.rms_government_reward.update(self.government_reward)
+        # self.rms_worker_reward.update(self.worker_utility)
+        # self.rms_firm_reward.update(self.firm_reward)
+        # self.rms_government_reward.update(self.government_reward)
 
-        self.worker_utility = ((self.worker_utility-self.rms_worker_reward.mean) /
-                               np.sqrt(self.rms_worker_reward.var+1e-5)).astype(np.float32)
-        self.firm_reward = ((self.firm_reward-self.rms_firm_reward.mean) /
-                            np.sqrt(self.rms_firm_reward.var+1e-5)).astype(np.float32)
-        self.government_reward = ((self.government_reward-self.rms_government_reward.mean) /
-                                  np.sqrt(self.rms_government_reward.var+1e-5)).astype(np.float32)
+        # self.worker_utility = ((self.worker_utility-self.rms_worker_reward.mean) /
+        #                        np.sqrt(self.rms_worker_reward.var+1e-5)).astype(np.float32)
+        # self.firm_reward = ((self.firm_reward-self.rms_firm_reward.mean) /
+        #                     np.sqrt(self.rms_firm_reward.var+1e-5)).astype(np.float32)
+        # self.government_reward = ((self.government_reward-self.rms_government_reward.mean) /
+        #                           np.sqrt(self.rms_government_reward.var+1e-5)).astype(np.float32)
 
     def scalar_repeat(self, scalar: float, n: int) -> np.ndarray:
         "将标量扩展为形状为 (n, ) 的向量。"
