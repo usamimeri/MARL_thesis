@@ -7,12 +7,11 @@ constants:
   equality_param: 0.5 # 公平效率系数
   labor_range: [0,10,20,30,40,50,60,70,80,90,100] # 劳动者劳动量
   consumption_range: [0,10,20,30,40,50,60,70,80,90,100] # 劳动者消费量
-  wage_range: [1,2,3,4,5,6,7,8,9,10] # 劳动者工资
+  wage_range: [3,6,9,12,15,18,21,24,27,30] # 劳动者工资
   captial_elasticity: [0.25,0.45,0.7] # 资本弹性
-
+  interest_rate: 0.005 # 利率
   depreciation_rate: 0.1 # 折旧率
   investment_rate: 0.03 # 资产用于投资的比率
-  interest_rate: 0.005 # 利率
   swf_eq_param: 0.5 # 社会福利函数公平效率系数
   storage_dpr: 0.25 # 存储折旧率 一部分磨损 一部分是过时卖不出去
 

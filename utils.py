@@ -218,10 +218,9 @@ class Logger:
         current_time = datetime.now().strftime("%Y-%m-%d_%H-%M")
         log_file = os.path.join(log_dir, f"{current_time}.log")
         logger.remove()
-        logger.add(log_file, encoding="utf-8", level=level)
+        logger.add(log_file, encoding="utf-8", level=level, colorize=True, format="{message}")
         self.logger = logger
 
     def info(self, message):
         if self.enabled:
             self.logger.info(message)
-
