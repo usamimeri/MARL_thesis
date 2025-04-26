@@ -213,7 +213,7 @@ def wandb_log(name: str, pg_loss_mean, vf_loss_mean, approx_kl_mean, loss_mean):
 class Logger:
     def __init__(self, log_dir="logs", level="INFO"):
         os.makedirs(log_dir, exist_ok=True)
-        self.enabled = True
+        self.enabled = False
         current_time = datetime.now().strftime("%Y-%m-%d_%H-%M")
         log_file = os.path.join(log_dir, f"{current_time}.log")
         logger.remove()

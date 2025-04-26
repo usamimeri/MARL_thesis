@@ -38,7 +38,9 @@ num_updates = config["train"]["total_timesteps"] // num_steps
 
 
 for epoch in range(num_updates):
-    env.logger.info(f"epoch: {epoch}")
+    print(f"epoch: {epoch}")
+    if epoch % 50 == 0:
+        env.logger.enabled = True
     env.reset()
     ppo_worker.buffer.reset()
     ppo_firm.buffer.reset()
@@ -122,7 +124,7 @@ for epoch in range(num_updates):
 
     wandb_log("worker", worker_pg_loss_mean, worker_vf_loss_mean,
               worker_approx_kl_mean, worker_loss_mean)
-    wandb_log("firm",firm_pg_loss_mean, firm_vf_loss_mean,
+    wandb_log("firm", firm_pg_loss_mean, firm_vf_loss_mean,
               firm_approx_kl_mean, firm_loss_mean)
     wandb_log("government", government_pg_loss_mean, government_vf_loss_mean,
               government_approx_kl_mean, government_loss_mean)
@@ -136,4 +138,5 @@ for epoch in range(num_updates):
                    f"worker/worker_{i+1}_in_firm": env.worker_in_firm[i]})
 
     wandb.log({"government/tax_rate": env.tax_rate})
+    env.logger.enabled = False
     # =====================================训练结束=====================================
